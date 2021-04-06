@@ -112,8 +112,8 @@ class OKCoin(Feed):
                 'last': Decimal(update.get('last', 0)),
                 'last_size': Decimal(update.get('last_qty', 0)),
                 'volume': Decimal(update.get('base_volume_24h', 0)),
-                'best_bid_size': Decimal(update.get('best_bid_size', 0)),
-                'best_ask_size': Decimal(update.get('best_ask_size', 0)),
+                'best_bid_size': Decimal(update.get('best_bid_size') or 0),   # nullable
+                'best_ask_size': Decimal(update.get('best_ask_size') or 0),   # nullable
             }
             await self.callback(TICKER, feed=self.id,
                                 symbol=pair,

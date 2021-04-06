@@ -112,10 +112,10 @@ class Deribit(Feed):
         extra_fields = {
             'high': Decimal(m.get('max_price', 0)),
             'low': Decimal(m.get('min_price', 0)),
-            'last': Decimal(m.get('last_price', 0)),
+            'last': Decimal(m.get('last_price') or 0),   # nullable
             'mark_price': Decimal(m.get('mark_price', 0)),
             'underlying_price': Decimal(m.get('underlying_price', 0)),
-            'volume': Decimal(m['stats'].get('volume') or 0),    # supports None values
+            'volume': Decimal(m['stats'].get('volume') or 0),    # nullable
             'best_bid_size': Decimal(m.get('best_bid_amount', 0)),
             'best_ask_size': Decimal(m.get('best_ask_amount', 0)),
             'bid_iv': Decimal(m.get('bid_iv', 0)),
