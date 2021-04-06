@@ -82,7 +82,21 @@ class KrakenFutures(Feed):
             "maturityTime": 0
         }
         """
-        await self.callback(TICKER, feed=self.id, symbol=pair, bid=msg['bid'], ask=msg['ask'], timestamp=timestamp, receipt_timestamp=timestamp)
+        extra_fields = {
+            'last': Decimal(msg.get('last', 0)),
+            'volume': Decimal(msg.get('volume', 0)),
+            'bid_size': Decimal(msg.get('bid_size', 0)),
+            'ask_size': Decimal(msg.get('ask_size', 0)),
+            'mark_price': Decimal(msg.get('markPrice', 0)),
+        }
+        await self.callback(TICKER, feed=self.id,
+                            symbol=pair,
+                            bid=msg['bid'],
+                            ask=msg['ask'],
+                            bbo=self.get_book_bbo(pair),
+                            timestamp=timestamp,
+                            receipt_timestamp=timestamp,
+                            **extra_fields)
 
     async def _book_snapshot(self, msg: dict, pair: str, timestamp: float):
         """

@@ -8,6 +8,7 @@ from collections import defaultdict
 from functools import partial
 import logging
 import os
+from decimal import Decimal
 from typing import Tuple, Callable, Union, List
 
 from cryptofeed.callback import Callback
@@ -234,6 +235,19 @@ class Feed:
         else:
             await self.callback(L3_BOOK, feed=self.id, symbol=symbol, book=book, timestamp=timestamp, receipt_timestamp=receipt_timestamp)
         self.updates[symbol] = 0
+
+    def get_book_bbo(self, symbol) -> dict:
+        """ Return OrderBook's best bid and offer (including sizes) """
+        try:
+            return {
+                BID: self.l2_book[symbol][BID].peekitem(),
+                ASK: self.l2_book[symbol][ASK].peekitem(0),
+            }
+        except (AttributeError, KeyError, IndexError):  # Empty OrderBook
+            return {
+                BID: (Decimal(), Decimal()),
+                ASK: (Decimal(), Decimal()),
+            }
 
     def check_bid_ask_overlapping(self, book, symbol):
         bid, ask = book[BID], book[ASK]

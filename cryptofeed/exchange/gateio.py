@@ -11,7 +11,7 @@ from sortedcontainers import SortedDict as sd
 from yapic import json
 
 from cryptofeed.connection import AsyncConnection
-from cryptofeed.defines import BID, ASK, GATEIO, L2_BOOK, TRADES, BUY, SELL
+from cryptofeed.defines import BID, ASK, GATEIO, L2_BOOK, TRADES, TICKER, BUY, SELL
 from cryptofeed.feed import Feed
 from cryptofeed.standards import symbol_exchange_to_std
 
@@ -31,7 +31,7 @@ class Gateio(Feed):
     async def _ticker(self, msg: dict, timestamp: float):
         """
         missing bid/ask so not useable
-
+        TM: added as we intend to fetch missing fields from the best OB price
         {
             'method': 'ticker.update',
             'params': [
@@ -51,7 +51,22 @@ class Gateio(Feed):
             'id': None
         }
         """
-        pass
+        symbol, m = msg['params']
+        symbol = symbol_exchange_to_std(symbol)
+        extra_fields = {
+            'high': Decimal(m.get('high', 0)),
+            'low': Decimal(m.get('low', 0)),
+            'last': Decimal(m.get('last', 0)),
+            'volume': Decimal(m.get('quoteVolume', 0)),  # this is actually baseVolume
+        }
+        await self.callback(TICKER, feed=self.id,
+                            symbol=symbol,
+                            bid=Decimal(0),
+                            ask=Decimal(0),
+                            bbo=self.get_book_bbo(symbol),
+                            timestamp=timestamp,
+                            receipt_timestamp=timestamp,
+                            **extra_fields)
 
     async def _trades(self, msg: dict, timestamp: float):
         """
@@ -148,6 +163,8 @@ class Gateio(Feed):
                 await self._trades(msg, timestamp)
             elif msg['method'] == 'depth.update':
                 await self._l2_book(msg, timestamp)
+            elif msg['method'] == 'ticker.update':
+                await self._ticker(msg, timestamp)  # TM: added
             else:
                 LOG.warning("%s: Unhandled message type %s", self.id, msg)
         else:

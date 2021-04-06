@@ -84,18 +84,26 @@ class Poloniex(Feed):
         Any orders that would match will be rejected. Maintenance mode indicates that maintenace is being performed
         and orders will be rejected
         """
-        pair_id, _, ask, bid, _, _, _, _, _, _, _, _ = msg
+        pair_id, last, ask, bid, _, volume, _, _, high, low, _, _ = msg
         if pair_id not in self.pair_mapping:
             # Ignore new trading pairs that are added during long running sessions
             return
         pair = symbol_exchange_to_std(self.pair_mapping[pair_id])
         if self.__do_callback(TICKER, pair):
+            extra_fields = {
+                'high': Decimal(high),
+                'low': Decimal(low),
+                'last': Decimal(last),
+                'volume': Decimal(volume),
+            }
             await self.callback(TICKER, feed=self.id,
                                 symbol=pair,
                                 bid=Decimal(bid),
                                 ask=Decimal(ask),
+                                bbo=self.get_book_bbo(pair),
                                 timestamp=timestamp,
-                                receipt_timestamp=timestamp)
+                                receipt_timestamp=timestamp,
+                                **extra_fields)
 
     async def _volume(self, msg: list, timestamp: float):
         # ['2018-01-02 00:45', 35361, {'BTC': '43811.201', 'ETH': '6747.243', 'XMR': '781.716', 'USDT': '196758644.806'}]

@@ -111,12 +111,21 @@ class Kraken(Feed):
         [93, {'a': ['105.85000', 0, '0.46100000'], 'b': ['105.77000', 45, '45.00000000'], 'c': ['105.83000', '5.00000000'], 'v': ['92170.25739498', '121658.17399954'], 'p': ['107.58276', '107.95234'], 't': [4966, 6717], 'l': ['105.03000', '105.03000'], 'h': ['110.33000', '110.33000'], 'o': ['109.45000', '106.78000']}]
         channel id, asks: price, wholeLotVol, vol, bids: price, wholeLotVol, close: ...,, vol: ..., VWAP: ..., trades: ..., low: ...., high: ..., open: ...
         """
+        m = msg[1]
+        extra_fields = {
+            'high': Decimal(m['h'][1]),     # [1] is 24h
+            'low': Decimal(m['l'][1]),      # [1] is 24h
+            'last': Decimal(m['c'][0]),     # [0] is price
+            'volume': Decimal(m['v'][0]),   # [1] is 24h
+        }
         await self.callback(TICKER, feed=self.id,
                             symbol=pair,
-                            bid=Decimal(msg[1]['b'][0]),
-                            ask=Decimal(msg[1]['a'][0]),
+                            bid=Decimal(m['b'][0]),
+                            ask=Decimal(m['a'][0]),
+                            bbo=self.get_book_bbo(pair),
                             timestamp=timestamp,
-                            receipt_timestamp=timestamp)
+                            receipt_timestamp=timestamp,
+                            **extra_fields)
 
     async def _book(self, msg: dict, pair: str, timestamp: float):
         delta = {BID: [], ASK: []}

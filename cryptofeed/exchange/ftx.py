@@ -194,12 +194,18 @@ class FTX(Feed):
         {"channel": "ticker", "market": "BTC/USD", "type": "update", "data": {"bid": 10717.5, "ask": 10719.0,
         "last": 10719.0, "time": 1564834587.1299787}}
         """
+        symbol = symbol_exchange_to_std(msg['market'])
+        extra_fields = {
+            'last': msg['data'].get('last'),
+        }
         await self.callback(TICKER, feed=self.id,
-                            symbol=symbol_exchange_to_std(msg['market']),
+                            symbol=symbol,
                             bid=Decimal(msg['data']['bid'] if msg['data']['bid'] else 0.0),
                             ask=Decimal(msg['data']['ask'] if msg['data']['ask'] else 0.0),
+                            bbo=self.get_book_bbo(symbol),
                             timestamp=float(msg['data']['time']),
-                            receipt_timestamp=timestamp)
+                            receipt_timestamp=timestamp,
+                            **extra_fields)
 
     async def _book(self, msg: dict, timestamp: float):
         """

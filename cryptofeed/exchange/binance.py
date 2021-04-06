@@ -140,12 +140,24 @@ class Binance(Feed):
         else:
             ts = timestamp
 
+        # 24hr rolling window, note: these are not available for the realtime "bookTicker" stream
+        extra_fields = {
+            'high': Decimal(msg.get('h', 0)),
+            'low': Decimal(msg.get('l', 0)),
+            'last': Decimal(msg.get('c', 0)),
+            'last_size': Decimal(msg.get('Q', 0)),
+            'volume': Decimal(msg.get('v', 0)),
+            'best_bid_size': Decimal(msg.get('B', 0)),
+            'best_ask_size': Decimal(msg.get('A', 0)),
+        }
         await self.callback(TICKER, feed=self.id,
                             symbol=pair,
                             bid=bid,
                             ask=ask,
+                            bbo=self.get_book_bbo(pair),
                             timestamp=ts,
-                            receipt_timestamp=timestamp)
+                            receipt_timestamp=timestamp,
+                            **extra_fields)
 
     async def _liquidations(self, msg: dict, timestamp: float):
         """

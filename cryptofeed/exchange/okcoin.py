@@ -106,12 +106,24 @@ class OKCoin(Feed):
         for update in msg['data']:
             pair = update['instrument_id']
             update_timestamp = timestamp_normalize(self.id, update['timestamp'])
+            extra_fields = {
+                'high': Decimal(update.get('high_24h', 0)),
+                'low': Decimal(update.get('low_24h', 0)),
+                'last': Decimal(update.get('last', 0)),
+                'last_size': Decimal(update.get('last_qty', 0)),
+                'volume': Decimal(update.get('base_volume_24h', 0)),
+                'best_bid_size': Decimal(update.get('best_bid_size', 0)),
+                'best_ask_size': Decimal(update.get('best_ask_size', 0)),
+            }
             await self.callback(TICKER, feed=self.id,
                                 symbol=pair,
                                 bid=Decimal(update['best_bid']) if update['best_bid'] else Decimal(0),
                                 ask=Decimal(update['best_ask']) if update['best_ask'] else Decimal(0),
+                                bbo=self.get_book_bbo(pair),
                                 timestamp=update_timestamp,
-                                receipt_timestamp=timestamp)
+                                receipt_timestamp=timestamp,
+                                **extra_fields)
+
             if 'open_interest' in update:
                 oi = update['open_interest']
                 if pair in self.open_interest and oi == self.open_interest[pair]:
