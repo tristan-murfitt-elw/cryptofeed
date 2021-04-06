@@ -136,12 +136,19 @@ class Bitmex(Feed):
 
     async def _ticker(self, msg: dict, timestamp: float):
         for data in msg['data']:
+            symbol = symbol_exchange_to_std(data['symbol'])
+            extra_fields = {
+                'best_bid_size': Decimal(data.get('bidSize', 0)),
+                'best_ask_size': Decimal(data.get('askSize', 0)),
+            }
             await self.callback(TICKER, feed=self.id,
-                                symbol=symbol_exchange_to_std(data['symbol']),
+                                symbol=symbol,
                                 bid=Decimal(data['bidPrice']),
                                 ask=Decimal(data['askPrice']),
+                                bbo=self.get_book_bbo(symbol),
                                 timestamp=timestamp_normalize(self.id, data['timestamp']),
-                                receipt_timestamp=timestamp)
+                                receipt_timestamp=timestamp,
+                                **extra_fields)
 
     async def _funding(self, msg: dict, timestamp: float):
         """

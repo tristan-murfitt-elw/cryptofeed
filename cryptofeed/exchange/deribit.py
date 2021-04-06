@@ -108,12 +108,28 @@ class Deribit(Feed):
         '''
         pair = symbol_exchange_to_std(msg['params']['data']['instrument_name'])
         ts = timestamp_normalize(self.id, msg['params']['data']['timestamp'])
+        m = msg['params']['data']
+        extra_fields = {
+            'high': Decimal(m.get('max_price', 0)),
+            'low': Decimal(m.get('min_price', 0)),
+            'last': Decimal(m.get('last_price', 0)),
+            'mark_price': Decimal(m.get('mark_price', 0)),
+            'underlying_price': Decimal(m.get('underlying_price', 0)),
+            'volume': Decimal(m['stats'].get('volume') or 0),    # supports None values
+            'best_bid_size': Decimal(m.get('best_bid_amount', 0)),
+            'best_ask_size': Decimal(m.get('best_ask_amount', 0)),
+            'bid_iv': Decimal(m.get('bid_iv', 0)),
+            'ask_iv': Decimal(m.get('ask_iv', 0)),
+            **m.get('greeks', {}),  # vega, theta, rho, gamma, delta
+        }
         await self.callback(TICKER, feed=self.id,
                             symbol=pair,
                             bid=Decimal(msg["params"]["data"]['best_bid_price']),
                             ask=Decimal(msg["params"]["data"]['best_ask_price']),
+                            bbo=self.get_book_bbo(pair),
                             timestamp=ts,
-                            receipt_timestamp=timestamp)
+                            receipt_timestamp=timestamp,
+                            **extra_fields)
 
         if "current_funding" in msg["params"]["data"] and "funding_8h" in msg["params"]["data"]:
             await self.callback(FUNDING, feed=self.id,

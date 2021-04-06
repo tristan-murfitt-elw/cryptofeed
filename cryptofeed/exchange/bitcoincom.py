@@ -57,12 +57,22 @@ class BitcoinCom(Feed):
                                 receipt_timestamp=timestamp)
 
     async def _ticker(self, msg: dict, timestamp: float):
+        symbol = symbol_exchange_to_std(msg['symbol'])
+        # 24h rolling window
+        extra_fields = {
+            'high': Decimal(msg.get('high', 0)),
+            'low': Decimal(msg.get('low', 0)),
+            'last': Decimal(msg.get('last', 0)),
+            'volume': Decimal(msg.get('volume', 0)),
+        }
         await self.callback(TICKER, feed=self.id,
-                            symbol=symbol_exchange_to_std(msg['symbol']),
+                            symbol=symbol,
                             bid=Decimal(msg['bid']),
                             ask=Decimal(msg['ask']),
+                            bbo=self.get_book_bbo(symbol),
                             timestamp=timestamp_normalize(self.id, msg['timestamp']),
-                            receipt_timestamp=timestamp)
+                            receipt_timestamp=timestamp,
+                            **extra_fields)
 
     async def _book_snapshot(self, msg: dict, timestamp: float):
         pair = symbol_exchange_to_std(msg['symbol'])

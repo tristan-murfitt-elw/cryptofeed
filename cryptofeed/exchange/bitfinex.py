@@ -67,13 +67,21 @@ class Bitfinex(Feed):
             return  # ignore heartbeats
         # bid, bid_size, ask, ask_size, daily_change, daily_change_percent,
         # last_price, volume, high, low
-        bid, _, ask, _, _, _, _, _, _, _ = msg[1]
+        bid, _, ask, _, _, _, last_price, volume, high, low = msg[1]
+        extra_fields = {
+            'high': Decimal(high),
+            'low': Decimal(low),
+            'last': Decimal(last_price),
+            'volume': Decimal(volume),
+        }
         await self.callback(TICKER, feed=self.id,
                             symbol=pair,
                             bid=bid,
                             ask=ask,
+                            bbo=self.get_book_bbo(pair),
                             timestamp=timestamp,
-                            receipt_timestamp=timestamp)
+                            receipt_timestamp=timestamp,
+                            **extra_fields)
 
     async def _funding(self, pair: str, msg: dict, timestamp: float):
         async def _funding_update(funding: list, timestamp: float):

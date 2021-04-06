@@ -55,15 +55,22 @@ class Bitflyer(Feed):
             }
         }
         """
-        pair = symbol_exchange_to_std(msg['params']['message']['product_code'])
-        bid = msg['params']['message']['best_bid']
-        ask = msg['params']['message']['best_ask']
+        msg = msg['params']['message']
+        pair = symbol_exchange_to_std(msg['product_code'])
+        extra_fields = {
+            'last': Decimal(msg.get('ltp', 0)),
+            'volume': Decimal(msg.get('volume', 0)),
+            'best_bid_size': Decimal(msg.get('best_bid_size', 0)),
+            'best_ask_size': Decimal(msg.get('best_ask_size', 0)),
+        }
         await self.callback(TICKER, feed=self.id,
                             symbol=pair,
-                            bid=bid,
-                            ask=ask,
-                            timestamp=timestamp_normalize(self.id, msg['params']['message']['timestamp']),
-                            receipt_timestamp=timestamp)
+                            bid=msg['best_bid'],
+                            ask=msg['best_ask'],
+                            bbo=self.get_book_bbo(pair),
+                            timestamp=timestamp_normalize(self.id, msg['timestamp']),
+                            receipt_timestamp=timestamp,
+                            **extra_fields)
 
     async def _trade(self, msg: dict, timestamp: float):
         """

@@ -88,12 +88,22 @@ class Coinbase(Feed):
             'last_size': '0.00241692'
         }
         '''
+        symbol = symbol_exchange_to_std(msg['product_id'])
+        extra_fields = {
+            'high': Decimal(msg.get('high_24h', 0)),
+            'low': Decimal(msg.get('low_24h', 0)),
+            'volume': Decimal(msg.get('volume_24h', 0)),
+            'last': Decimal(msg.get('price', 0)),
+            'last_size': Decimal(msg.get('last_size', 0)),
+        }
         await self.callback(TICKER, feed=self.id,
-                            symbol=symbol_exchange_to_std(msg['product_id']),
+                            symbol=symbol,
                             bid=Decimal(msg['best_bid']),
                             ask=Decimal(msg['best_ask']),
+                            bbo=self.get_book_bbo(symbol),
                             timestamp=timestamp_normalize(self.id, msg['time']),
-                            receipt_timestamp=timestamp)
+                            receipt_timestamp=timestamp,
+                            **extra_fields)
 
     async def _book_update(self, msg: dict, timestamp: float):
         '''
