@@ -8,7 +8,7 @@ from cryptofeed.connection import AsyncConnection
 from cryptofeed.defines import BID, ASK, BUY, DERIBIT, FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, SELL, TICKER, TRADES
 from cryptofeed.feed import Feed
 from cryptofeed.exceptions import MissingSequenceNumber
-from cryptofeed.standards import timestamp_normalize
+from cryptofeed.standards import timestamp_normalize, symbol_exchange_to_std
 
 
 LOG = logging.getLogger('feedhandler')
@@ -54,7 +54,7 @@ class Deribit(Feed):
         for trade in msg["params"]["data"]:
             await self.callback(TRADES,
                                 feed=self.id,
-                                symbol=trade["instrument_name"],
+                                symbol=symbol_exchange_to_std(trade["instrument_name"]),
                                 order_id=trade['trade_id'],
                                 side=BUY if trade['direction'] == 'buy' else SELL,
                                 amount=Decimal(trade['amount']),
@@ -65,7 +65,7 @@ class Deribit(Feed):
             if 'liquidation' in trade:
                 await self.callback(LIQUIDATIONS,
                                     feed=self.id,
-                                    symbol=trade["instrument_name"],
+                                    symbol=symbol_exchange_to_std(trade["instrument_name"]),
                                     side=BUY if trade['direction'] == 'buy' else SELL,
                                     leaves_qty=Decimal(trade['amount']),
                                     price=Decimal(trade['price']),
@@ -106,7 +106,7 @@ class Deribit(Feed):
             "method" : "subscription",
             "jsonrpc" : "2.0"}
         '''
-        pair = msg['params']['data']['instrument_name']
+        pair = symbol_exchange_to_std(msg['params']['data']['instrument_name'])
         ts = timestamp_normalize(self.id, msg['params']['data']['timestamp'])
         await self.callback(TICKER, feed=self.id,
                             symbol=pair,
@@ -170,7 +170,7 @@ class Deribit(Feed):
         }
         """
         ts = msg["params"]["data"]["timestamp"]
-        pair = msg["params"]["data"]["instrument_name"]
+        pair = symbol_exchange_to_std(msg["params"]["data"]["instrument_name"])
         self.l2_book[pair] = {
             BID: sd({
                 Decimal(price): Decimal(amount)
@@ -189,7 +189,7 @@ class Deribit(Feed):
 
     async def _book_update(self, msg: dict, timestamp: float):
         ts = msg["params"]["data"]["timestamp"]
-        pair = msg["params"]["data"]["instrument_name"]
+        pair = symbol_exchange_to_std(msg["params"]["data"]["instrument_name"])
 
         if msg['params']['data']['prev_change_id'] != self.seq_no[pair]:
             LOG.warning("%s: Missing sequence number detected for %s", self.id, pair)
