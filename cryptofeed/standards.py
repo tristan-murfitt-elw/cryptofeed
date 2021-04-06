@@ -199,7 +199,7 @@ _feed_to_exchange_map = {
         BITCOINCOM: 'subscribeTicker',
         BITMAX: UNSUPPORTED,
         UPBIT: UNSUPPORTED,
-        GATEIO: UNSUPPORTED,
+        GATEIO: 'ticker.subscribe',
         PROBIT: UNSUPPORTED
     },
     VOLUME: {
