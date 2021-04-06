@@ -243,7 +243,7 @@ class Feed:
                 BID: self.l2_book[symbol][BID].peekitem(),
                 ASK: self.l2_book[symbol][ASK].peekitem(0),
             }
-        except (AttributeError, KeyError):
+        except (AttributeError, KeyError, IndexError):  # Empty OrderBook
             return {
                 BID: (Decimal(), Decimal()),
                 ASK: (Decimal(), Decimal()),
