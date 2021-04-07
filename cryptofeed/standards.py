@@ -186,7 +186,7 @@ _feed_to_exchange_map = {
         BINANCE_FUTURES: 'bookTicker',
         BINANCE_DELIVERY: 'bookTicker',
         BLOCKCHAIN: UNSUPPORTED,
-        HUOBI: UNSUPPORTED,
+        HUOBI: 'bbo',
         HUOBI_DM: UNSUPPORTED,
         OKCOIN: '{}/ticker',
         OKEX: '{}/ticker',

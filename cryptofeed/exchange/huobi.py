@@ -12,7 +12,7 @@ from sortedcontainers import SortedDict as sd
 from yapic import json
 
 from cryptofeed.connection import AsyncConnection
-from cryptofeed.defines import BID, ASK, BUY, HUOBI, L2_BOOK, SELL, TRADES
+from cryptofeed.defines import BID, ASK, BUY, HUOBI, L2_BOOK, SELL, TRADES, TICKER
 from cryptofeed.feed import Feed
 from cryptofeed.standards import symbol_exchange_to_std, timestamp_normalize
 
@@ -51,6 +51,28 @@ class Huobi(Feed):
         self.l2_book[pair] = update
 
         await self.book_callback(self.l2_book[pair], L2_BOOK, pair, forced, False, timestamp_normalize(self.id, msg['ts']), timestamp)
+
+    async def _ticker(self, msg: dict, timestamp: float):
+        """
+        example message:
+
+        {'ch': 'market.btcusdt.bbo', 'ts': 1617786845920,
+        'tick': {'seqId': 124362050749, 'ask': Decimal('57245.26'), 'askSize': Decimal('2.339316'), 'bid': Decimal('57245.25'), 'bidSize': Decimal('0.279476'), 'quoteTime': 1617786845920, 'symbol': 'btcusdt'}}
+        """
+        data = msg['tick']
+        symbol = symbol_exchange_to_std(data['symbol'])
+        extra_fields = {
+            'best_bid_size': data.get('bidSize') or Decimal(0),
+            'best_ask_size': data.get('askSize') or Decimal(0),
+        }
+        await self.callback(TICKER, feed=self.id,
+                            symbol=symbol,
+                            bid=data['bid'],
+                            ask=data['ask'],
+                            bbo=self.get_book_bbo(symbol),
+                            timestamp=timestamp_normalize(self.id, data['quoteTime']),
+                            receipt_timestamp=timestamp,
+                            **extra_fields)
 
     async def _trade(self, msg: dict, timestamp: float):
         """
@@ -100,6 +122,8 @@ class Huobi(Feed):
                 await self._trade(msg, timestamp)
             elif 'depth' in msg['ch']:
                 await self._book(msg, timestamp)
+            elif 'bbo' in msg['ch']:
+                await self._ticker(msg, timestamp)
             else:
                 LOG.warning("%s: Invalid message type %s", self.id, msg)
         else:
