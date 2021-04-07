@@ -197,6 +197,8 @@ class FTX(Feed):
         symbol = symbol_exchange_to_std(msg['market'])
         extra_fields = {
             'last': msg['data'].get('last'),
+            'best_bid_size': msg['data'].get('bidSize') or Decimal(0),
+            'best_ask_size': msg['data'].get('askSize') or Decimal(0),
         }
         await self.callback(TICKER, feed=self.id,
                             symbol=symbol,
