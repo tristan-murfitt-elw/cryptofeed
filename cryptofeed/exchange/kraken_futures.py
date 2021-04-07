@@ -14,7 +14,7 @@ from cryptofeed.connection import AsyncConnection
 from cryptofeed.defines import BID, ASK, BUY, FUNDING, KRAKEN_FUTURES, L2_BOOK, OPEN_INTEREST, SELL, TICKER, TRADES
 from cryptofeed.exceptions import MissingSequenceNumber
 from cryptofeed.feed import Feed
-from cryptofeed.standards import timestamp_normalize
+from cryptofeed.standards import timestamp_normalize, symbol_exchange_to_std
 
 
 LOG = logging.getLogger('feedhandler')
@@ -206,17 +206,18 @@ class KrakenFutures(Feed):
             else:
                 LOG.warning("%s: Invalid message type %s", self.id, msg)
         else:
+            pair = symbol_exchange_to_std(msg['product_id'])
             if msg['feed'] == 'trade':
-                await self._trade(msg, msg['product_id'], timestamp)
+                await self._trade(msg, pair, timestamp)
             elif msg['feed'] == 'trade_snapshot':
                 return
             elif msg['feed'] == 'ticker_lite':
-                await self._ticker(msg, msg['product_id'], timestamp)
+                await self._ticker(msg, pair, timestamp)
             elif msg['feed'] == 'ticker':
-                await self._funding(msg, msg['product_id'], timestamp)
+                await self._funding(msg, pair, timestamp)
             elif msg['feed'] == 'book_snapshot':
-                await self._book_snapshot(msg, msg['product_id'], timestamp)
+                await self._book_snapshot(msg, pair, timestamp)
             elif msg['feed'] == 'book':
-                await self._book(msg, msg['product_id'], timestamp)
+                await self._book(msg, pair, timestamp)
             else:
                 LOG.warning("%s: Invalid message type %s", self.id, msg)

@@ -562,7 +562,7 @@ def kraken_future_symbols() -> Dict[str, str]:
             _exchange_info[KRAKEN_FUTURES]['contract_size'][normalized] = entry['contractSize']
             _exchange_info[KRAKEN_FUTURES]['underlying'][normalized] = entry['underlying']
             _exchange_info[KRAKEN_FUTURES]['product_type'][normalized] = _kraken_futures_product_type[normalized[:2]]
-            ret[normalized] = entry['symbol']
+            ret[normalized] = entry['symbol'].upper()
         return ret
     except Exception as why:
         raise_failure_explanation('KRAKEN_FUTURES', why, {"": r})
