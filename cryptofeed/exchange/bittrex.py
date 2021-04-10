@@ -33,18 +33,18 @@ class Bittrex(Feed):
     async def ticker(self, msg: dict, timestamp: float):
         for t in msg['D']:
             if (not self.subscription and t['M'] in self.symbols) or ('SubscribeToSummaryDeltas' in self.subscription and t['M'] in self.subscription['SubscribeToSummaryDeltas']):
+                symbol = symbol_exchange_to_std(t['M'])
                 extra_fields = {
+                    'bbo': self.get_book_bbo(symbol),
                     'high': Decimal(t.get('H', 0)),
                     'low': Decimal(t.get('L', 0)),
                     'last': Decimal(t.get('l', 0)),
                     'volume': Decimal(t.get('V', 0)),  # m=base_volume, V=quote_volume but Bittrex flip their Base/Quote in v1 (this is fixed in v3... https://github.com/bmoscon/cryptofeed/issues/294)
                 }
-                symbol = symbol_exchange_to_std(t['M'])
                 await self.callback(TICKER, feed=self.id,
                                     symbol=symbol,
                                     bid=Decimal(t['B']),
                                     ask=Decimal(t['A']),
-                                    bbo=self.get_book_bbo(symbol),
                                     timestamp=timestamp_normalize(self.id, t['T']),
                                     receipt_timestamp=timestamp,
                                     **extra_fields)

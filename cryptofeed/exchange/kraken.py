@@ -113,6 +113,7 @@ class Kraken(Feed):
         """
         m = msg[1]
         extra_fields = {
+            'bbo': self.get_book_bbo(pair),
             'high': Decimal(m['h'][1]),     # [1] is 24h
             'low': Decimal(m['l'][1]),      # [1] is 24h
             'last': Decimal(m['c'][0]),     # [0] is price
@@ -122,7 +123,6 @@ class Kraken(Feed):
                             symbol=pair,
                             bid=Decimal(m['b'][0]),
                             ask=Decimal(m['a'][0]),
-                            bbo=self.get_book_bbo(pair),
                             timestamp=timestamp,
                             receipt_timestamp=timestamp,
                             **extra_fields)

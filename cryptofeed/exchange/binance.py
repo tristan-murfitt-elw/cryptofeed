@@ -133,6 +133,7 @@ class Binance(Feed):
 
         # 24hr rolling window, note: these are not available for the realtime "bookTicker" stream
         extra_fields = {
+            'bbo': self.get_book_bbo(pair),
             'high': Decimal(msg.get('h', 0)),
             'low': Decimal(msg.get('l', 0)),
             'last': Decimal(msg.get('c', 0)),
@@ -145,7 +146,6 @@ class Binance(Feed):
                             symbol=pair,
                             bid=bid,
                             ask=ask,
-                            bbo=self.get_book_bbo(pair),
                             timestamp=ts,
                             receipt_timestamp=timestamp,
                             **extra_fields)

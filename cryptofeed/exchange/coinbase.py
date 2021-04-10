@@ -90,6 +90,7 @@ class Coinbase(Feed):
         '''
         symbol = symbol_exchange_to_std(msg['product_id'])
         extra_fields = {
+            'bbo': self.get_book_bbo(symbol),
             'high': Decimal(msg.get('high_24h', 0)),
             'low': Decimal(msg.get('low_24h', 0)),
             'volume': Decimal(msg.get('volume_24h', 0)),
@@ -100,7 +101,6 @@ class Coinbase(Feed):
                             symbol=symbol,
                             bid=Decimal(msg['best_bid']),
                             ask=Decimal(msg['best_ask']),
-                            bbo=self.get_book_bbo(symbol),
                             timestamp=timestamp_normalize(self.id, msg['time']),
                             receipt_timestamp=timestamp,
                             **extra_fields)

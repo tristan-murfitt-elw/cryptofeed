@@ -45,8 +45,8 @@ class TradeCallback(Callback):
 
 
 class TickerCallback(Callback):
-    async def __call__(self, *, feed: str, symbol: str, bid: Decimal, ask: Decimal, bbo: dict, timestamp: float, receipt_timestamp: float, **kwargs):
-        await super().__call__(feed, symbol, bid, ask, bbo, timestamp, receipt_timestamp, **kwargs)
+    async def __call__(self, *, feed: str, symbol: str, bid: Decimal, ask: Decimal, timestamp: float, receipt_timestamp: float, **kwargs):
+        await super().__call__(feed, symbol, bid, ask, timestamp, receipt_timestamp, **kwargs)
 
 
 class BookCallback(Callback):
@@ -61,7 +61,7 @@ class BookUpdateCallback(Callback):
     """
     For Book Deltas
     """
-    async def __call__(self, *, feed: str, symbol: str, delta: dict, timestamp: float, receipt_timestamp: float):
+    async def __call__(self, *, feed: str, symbol: str, delta: dict, timestamp: float, receipt_timestamp: float, **kwargs):
         """
         Delta is in format of:
         {
@@ -70,7 +70,7 @@ class BookUpdateCallback(Callback):
         }
         prices with size 0 should be deleted from the book
         """
-        await super().__call__(feed, symbol, delta, timestamp, receipt_timestamp)
+        await super().__call__(feed, symbol, delta, timestamp, receipt_timestamp, **kwargs)
 
 
 class CandleCallback(Callback):

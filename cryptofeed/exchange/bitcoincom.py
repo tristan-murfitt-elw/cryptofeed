@@ -60,6 +60,7 @@ class BitcoinCom(Feed):
         symbol = symbol_exchange_to_std(msg['symbol'])
         # 24h rolling window
         extra_fields = {
+            'bbo': self.get_book_bbo(symbol),
             'high': Decimal(msg.get('high', 0)),
             'low': Decimal(msg.get('low', 0)),
             'last': Decimal(msg.get('last', 0)),
@@ -69,7 +70,6 @@ class BitcoinCom(Feed):
                             symbol=symbol,
                             bid=Decimal(msg['bid']),
                             ask=Decimal(msg['ask']),
-                            bbo=self.get_book_bbo(symbol),
                             timestamp=timestamp_normalize(self.id, msg['timestamp']),
                             receipt_timestamp=timestamp,
                             **extra_fields)

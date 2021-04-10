@@ -107,6 +107,7 @@ class OKCoin(Feed):
             pair = update['instrument_id']
             update_timestamp = timestamp_normalize(self.id, update['timestamp'])
             extra_fields = {
+                'bbo': self.get_book_bbo(pair),
                 'high': Decimal(update.get('high_24h', 0)),
                 'low': Decimal(update.get('low_24h', 0)),
                 'last': Decimal(update.get('last', 0)),
@@ -119,7 +120,6 @@ class OKCoin(Feed):
                                 symbol=pair,
                                 bid=Decimal(update['best_bid']) if update['best_bid'] else Decimal(0),
                                 ask=Decimal(update['best_ask']) if update['best_ask'] else Decimal(0),
-                                bbo=self.get_book_bbo(pair),
                                 timestamp=update_timestamp,
                                 receipt_timestamp=timestamp,
                                 **extra_fields)

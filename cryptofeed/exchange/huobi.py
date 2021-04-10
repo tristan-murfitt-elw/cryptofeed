@@ -62,6 +62,7 @@ class Huobi(Feed):
         data = msg['tick']
         symbol = symbol_exchange_to_std(data['symbol'])
         extra_fields = {
+            'bbo': self.get_book_bbo(symbol),
             'best_bid_size': data.get('bidSize') or Decimal(0),
             'best_ask_size': data.get('askSize') or Decimal(0),
         }
@@ -69,7 +70,6 @@ class Huobi(Feed):
                             symbol=symbol,
                             bid=data['bid'],
                             ask=data['ask'],
-                            bbo=self.get_book_bbo(symbol),
                             timestamp=timestamp_normalize(self.id, data['quoteTime']),
                             receipt_timestamp=timestamp,
                             **extra_fields)

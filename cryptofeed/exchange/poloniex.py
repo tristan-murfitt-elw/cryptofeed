@@ -91,6 +91,7 @@ class Poloniex(Feed):
         pair = symbol_exchange_to_std(self.pair_mapping[pair_id])
         if self.__do_callback(TICKER, pair):
             extra_fields = {
+                'bbo': self.get_book_bbo(pair),
                 'high': Decimal(high),
                 'low': Decimal(low),
                 'last': Decimal(last),
@@ -100,7 +101,6 @@ class Poloniex(Feed):
                                 symbol=pair,
                                 bid=Decimal(bid),
                                 ask=Decimal(ask),
-                                bbo=self.get_book_bbo(pair),
                                 timestamp=timestamp,
                                 receipt_timestamp=timestamp,
                                 **extra_fields)

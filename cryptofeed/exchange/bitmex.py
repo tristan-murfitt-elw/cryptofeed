@@ -138,6 +138,7 @@ class Bitmex(Feed):
         for data in msg['data']:
             symbol = symbol_exchange_to_std(data['symbol'])
             extra_fields = {
+                'bbo': self.get_book_bbo(symbol),
                 'best_bid_size': Decimal(data.get('bidSize', 0)),
                 'best_ask_size': Decimal(data.get('askSize', 0)),
             }
@@ -145,7 +146,6 @@ class Bitmex(Feed):
                                 symbol=symbol,
                                 bid=Decimal(data['bidPrice']),
                                 ask=Decimal(data['askPrice']),
-                                bbo=self.get_book_bbo(symbol),
                                 timestamp=timestamp_normalize(self.id, data['timestamp']),
                                 receipt_timestamp=timestamp,
                                 **extra_fields)

@@ -196,6 +196,7 @@ class FTX(Feed):
         """
         symbol = symbol_exchange_to_std(msg['market'])
         extra_fields = {
+            'bbo': self.get_book_bbo(symbol),
             'last': msg['data'].get('last'),
             'best_bid_size': msg['data'].get('bidSize') or Decimal(0),
             'best_ask_size': msg['data'].get('askSize') or Decimal(0),
@@ -204,7 +205,6 @@ class FTX(Feed):
                             symbol=symbol,
                             bid=Decimal(msg['data']['bid'] if msg['data']['bid'] else 0.0),
                             ask=Decimal(msg['data']['ask'] if msg['data']['ask'] else 0.0),
-                            bbo=self.get_book_bbo(symbol),
                             timestamp=float(msg['data']['time']),
                             receipt_timestamp=timestamp,
                             **extra_fields)

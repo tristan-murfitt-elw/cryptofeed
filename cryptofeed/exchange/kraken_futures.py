@@ -83,6 +83,7 @@ class KrakenFutures(Feed):
         }
         """
         extra_fields = {
+            'bbo': self.get_book_bbo(pair),
             'last': Decimal(msg.get('last', 0)),
             'volume': Decimal(msg.get('volume', 0)),
             'bid_size': Decimal(msg.get('bid_size', 0)),
@@ -93,7 +94,6 @@ class KrakenFutures(Feed):
                             symbol=pair,
                             bid=msg['bid'],
                             ask=msg['ask'],
-                            bbo=self.get_book_bbo(pair),
                             timestamp=timestamp,
                             receipt_timestamp=timestamp,
                             **extra_fields)

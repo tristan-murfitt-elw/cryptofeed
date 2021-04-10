@@ -30,6 +30,7 @@ class HitBTC(Feed):
     async def _ticker(self, msg: dict, timestamp: float):
         symbol = symbol_exchange_to_std(msg['symbol'])
         extra_fields = {
+            'bbo': self.get_book_bbo(symbol),
             'high': Decimal(msg.get('high', 0)),
             'low': Decimal(msg.get('low', 0)),
             'last': Decimal(msg.get('last') or 0),  # nullable
@@ -39,7 +40,6 @@ class HitBTC(Feed):
                             symbol=symbol,
                             bid=Decimal(msg['bid'] or 0),  # nullable
                             ask=Decimal(msg['ask'] or 0),  # nullable
-                            bbo=self.get_book_bbo(symbol),
                             timestamp=timestamp_normalize(self.id, msg['timestamp']),
                             receipt_timestamp=timestamp,
                             **extra_fields)

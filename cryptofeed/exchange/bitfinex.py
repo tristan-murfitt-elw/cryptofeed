@@ -69,6 +69,7 @@ class Bitfinex(Feed):
         # last_price, volume, high, low
         bid, _, ask, _, _, _, last_price, volume, high, low = msg[1]
         extra_fields = {
+            'bbo': self.get_book_bbo(pair),
             'high': Decimal(high),
             'low': Decimal(low),
             'last': Decimal(last_price),
@@ -78,7 +79,6 @@ class Bitfinex(Feed):
                             symbol=pair,
                             bid=bid,
                             ask=ask,
-                            bbo=self.get_book_bbo(pair),
                             timestamp=timestamp,
                             receipt_timestamp=timestamp,
                             **extra_fields)

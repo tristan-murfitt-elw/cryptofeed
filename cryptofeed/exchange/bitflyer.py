@@ -58,6 +58,7 @@ class Bitflyer(Feed):
         msg = msg['params']['message']
         pair = symbol_exchange_to_std(msg['product_code'])
         extra_fields = {
+            'bbo': self.get_book_bbo(pair),
             'last': Decimal(msg.get('ltp', 0)),
             'volume': Decimal(msg.get('volume', 0)),
             'best_bid_size': Decimal(msg.get('best_bid_size', 0)),
@@ -67,7 +68,6 @@ class Bitflyer(Feed):
                             symbol=pair,
                             bid=msg['best_bid'],
                             ask=msg['best_ask'],
-                            bbo=self.get_book_bbo(pair),
                             timestamp=timestamp_normalize(self.id, msg['timestamp']),
                             receipt_timestamp=timestamp,
                             **extra_fields)

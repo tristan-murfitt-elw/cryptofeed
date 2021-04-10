@@ -54,6 +54,7 @@ class Gateio(Feed):
         symbol, m = msg['params']
         symbol = symbol_exchange_to_std(symbol)
         extra_fields = {
+            'bbo': self.get_book_bbo(symbol),
             'high': Decimal(m.get('high', 0)),
             'low': Decimal(m.get('low', 0)),
             'last': Decimal(m.get('last', 0)),
@@ -63,7 +64,6 @@ class Gateio(Feed):
                             symbol=symbol,
                             bid=Decimal(0),
                             ask=Decimal(0),
-                            bbo=self.get_book_bbo(symbol),
                             timestamp=timestamp,
                             receipt_timestamp=timestamp,
                             **extra_fields)

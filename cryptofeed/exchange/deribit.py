@@ -110,6 +110,7 @@ class Deribit(Feed):
         ts = timestamp_normalize(self.id, msg['params']['data']['timestamp'])
         m = msg['params']['data']
         extra_fields = {
+            'bbo': self.get_book_bbo(pair),
             'high': Decimal(m.get('max_price', 0)),
             'low': Decimal(m.get('min_price', 0)),
             'last': Decimal(m.get('last_price') or 0),   # nullable
@@ -126,7 +127,6 @@ class Deribit(Feed):
                             symbol=pair,
                             bid=Decimal(msg["params"]["data"]['best_bid_price']),
                             ask=Decimal(msg["params"]["data"]['best_ask_price']),
-                            bbo=self.get_book_bbo(pair),
                             timestamp=ts,
                             receipt_timestamp=timestamp,
                             **extra_fields)
