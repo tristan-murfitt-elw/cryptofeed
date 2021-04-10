@@ -53,8 +53,8 @@ class BookCallback(Callback):
     """
     For full L2/L3 book updates
     """
-    async def __call__(self, *, feed: str, symbol: str, book: dict, timestamp: float, receipt_timestamp: float):
-        await super().__call__(feed, symbol, book, timestamp, receipt_timestamp)
+    async def __call__(self, *, feed: str, symbol: str, book: dict, timestamp: float, receipt_timestamp: float, **kwargs):
+        await super().__call__(feed, symbol, book, timestamp, receipt_timestamp, **kwargs)
 
 
 class BookUpdateCallback(Callback):

@@ -212,7 +212,7 @@ class Feed:
                 self.updates[symbol] += 1
                 if self.cross_check:
                     self.check_bid_ask_overlapping(book, symbol)
-                await self.callback(BOOK_DELTA, feed=self.id, symbol=symbol, delta=delta, timestamp=timestamp, receipt_timestamp=receipt_timestamp)
+                await self.callback(BOOK_DELTA, feed=self.id, symbol=symbol, delta=delta, timestamp=timestamp, receipt_timestamp=receipt_timestamp, bbo=self.get_book_bbo(symbol))
                 if self.updates[symbol] != self.book_update_interval:
                     return
             elif forced and self.max_depth:
@@ -231,18 +231,26 @@ class Feed:
         if self.cross_check:
             self.check_bid_ask_overlapping(book, symbol)
         if book_type == L2_BOOK:
-            await self.callback(L2_BOOK, feed=self.id, symbol=symbol, book=book, timestamp=timestamp, receipt_timestamp=receipt_timestamp)
+            await self.callback(L2_BOOK, feed=self.id, symbol=symbol, book=book, timestamp=timestamp, receipt_timestamp=receipt_timestamp, bbo=self.get_book_bbo(symbol, book_type))
         else:
-            await self.callback(L3_BOOK, feed=self.id, symbol=symbol, book=book, timestamp=timestamp, receipt_timestamp=receipt_timestamp)
+            await self.callback(L3_BOOK, feed=self.id, symbol=symbol, book=book, timestamp=timestamp, receipt_timestamp=receipt_timestamp, bbo=self.get_book_bbo(symbol, book_type))
         self.updates[symbol] = 0
 
-    def get_book_bbo(self, symbol) -> dict:
+    def get_book_bbo(self, symbol: str, book_type: str = L2_BOOK) -> dict:
         """ Return OrderBook's best bid and offer (including sizes) """
         try:
-            return {
-                BID: self.l2_book[symbol][BID].peekitem(),
-                ASK: self.l2_book[symbol][ASK].peekitem(0),
-            }
+            if book_type == L2_BOOK:
+                return {
+                    BID: self.l2_book[symbol][BID].peekitem(),
+                    ASK: self.l2_book[symbol][ASK].peekitem(0),
+                }
+            else:
+                bid = self.l3_book[symbol][BID].peekitem()
+                ask = self.l3_book[symbol][ASK].peekitem(0)
+                return {
+                    BID: (bid[0], sum(bid[1].values())),
+                    ASK: (ask[0], sum(ask[1].values())),
+                }
         except (AttributeError, KeyError, IndexError):  # Empty OrderBook
             return {
                 BID: (Decimal(), Decimal()),
