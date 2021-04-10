@@ -324,12 +324,18 @@ class FeedHandler:
         """
         Connect to exchange and subscribe
         """
+        try:
+            chan, tickers = subscribe.keywords.get('options')
+        except Exception:
+            chan, tickers = None, None
+        identifier = f'<{conn.uuid}|{chan}:{tickers}>'
         retries = 0
         rate_limited = 1
         delay = conn.delay
         while retries < self.retries or self.retries == -1:
             self.last_msg[conn.uuid] = None
             try:
+                LOG.warning(f'[RETRY {retries}] Connecting to {identifier}')
                 async with conn.connect() as connection:
                     asyncio.ensure_future(self._watch(connection))
                     # connection was successful, reset retry count and delay
@@ -342,9 +348,9 @@ class FeedHandler:
                 if self.exceptions:
                     for ex in self.exceptions:
                         if isinstance(e, ex):
-                            LOG.warning("%s: encountered exception %s, which is on the ignore list. Raising", conn.uuid, str(e))
+                            LOG.warning("%s: encountered exception %s, which is on the ignore list. Raising", identifier, str(e))
                             raise
-                LOG.warning("%s: encountered connection issue %s - reconnecting in %.1f seconds...", conn.uuid, str(e), delay, exc_info=True)
+                LOG.warning("%s: encountered connection issue %s - reconnecting in %.1f seconds...", identifier, str(e), delay, exc_info=True)
                 await asyncio.sleep(delay)
                 retries += 1
                 delay *= 2
@@ -352,14 +358,14 @@ class FeedHandler:
                 if self.exceptions:
                     for ex in self.exceptions:
                         if isinstance(e, ex):
-                            LOG.warning("%s: encountered exception %s, which is on the ignore list. Raising", conn.uuid, str(e))
+                            LOG.warning("%s: encountered exception %s, which is on the ignore list. Raising", identifier, str(e))
                             raise
                 if e.status_code == 429:
-                    LOG.warning("%s: Rate Limited - waiting %d seconds to reconnect", conn.uuid, rate_limited * 60)
+                    LOG.warning("%s: Rate Limited - waiting %d seconds to reconnect to %s", identifier, rate_limited * 60)
                     await asyncio.sleep(rate_limited * 60)
                     rate_limited += 1
                 else:
-                    LOG.warning("%s: encountered connection issue %s - reconnecting in %.1f seconds...", conn.uuid, str(e), delay, exc_info=True)
+                    LOG.warning("%s: encountered connection issue %s - reconnecting in %.1f seconds...", identifier, str(e), delay, exc_info=True)
                     await asyncio.sleep(delay)
                     retries += 1
                     delay *= 2
@@ -367,7 +373,7 @@ class FeedHandler:
                 if self.exceptions:
                     for ex in self.exceptions:
                         if isinstance(e, ex):
-                            LOG.warning("%s: encountered exception %s, which is on the ignore list. Raising", conn.uuid, str(e))
+                            LOG.warning("%s: encountered exception %s, which is on the ignore list. Raising", identifier, str(e))
                             raise
                 LOG.error("%s: encountered an exception, reconnecting in %.1f seconds", conn.uuid, delay, exc_info=True)
                 await asyncio.sleep(delay)
@@ -375,10 +381,12 @@ class FeedHandler:
                 delay *= 2
 
         if self.retries == 0:
-            LOG.info('%s: terminate the connection handler because self.retries=0', conn.uuid)
+            LOG.info('%s: terminate the connection handler because self.retries=0', identifier)
         else:
-            LOG.error('%s: failed to reconnect after %d retries - exiting', conn.uuid, retries)
+            LOG.error('%s: failed to reconnect after %d retries - exiting', identifier, retries)
             raise ExhaustedRetries()
+
+        print(f'CONNECTION {identifier} HANDLER TERMINATED...')
 
     async def _handler(self, connection, handler):
         try:
