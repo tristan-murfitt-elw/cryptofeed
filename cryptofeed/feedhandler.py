@@ -9,6 +9,7 @@ import logging
 import signal
 from signal import SIGABRT, SIGINT, SIGTERM
 import sys
+from functools import partial
 
 try:
     # unix / macos only
@@ -128,6 +129,7 @@ class FeedHandler:
         if exception_ignore is not None and not isinstance(exception_ignore, list):
             raise ValueError("exception_ignore must be a list of Exceptions or None")
         self.exceptions = exception_ignore
+        self.asyncio_tasks = []
 
         get_logger('feedhandler', self.config.log.filename, self.config.log.level)
         if self.config.log_msg:
@@ -192,7 +194,9 @@ class FeedHandler:
                 self.raw_message_capture.set_header(conn.uuid, json.dumps(f._feed_config))
             self.timeout[conn.uuid] = timeout
             feed.start(loop)
-            loop.create_task(self._connect(conn, sub, handler))
+            task = loop.create_task(self._connect(conn, sub, handler))
+            overrides = sub.keywords.get('options') if isinstance(sub, partial) else None
+            self.asyncio_tasks.append({'uuid': conn.uuid, 'config': f._feed_config, 'overrides': overrides, 'feed': f, 'task': task})
 
     def add_nbbo(self, feeds, symbols, callback, timeout=120):
         """
@@ -239,7 +243,9 @@ class FeedHandler:
                 if self.raw_message_capture:
                     self.raw_message_capture.set_header(conn.uuid, json.dumps(feed._feed_config))
                     conn.set_raw_data_callback(self.raw_message_capture)
-                loop.create_task(self._connect(conn, sub, handler))
+                task = loop.create_task(self._connect(conn, sub, handler))
+                overrides = sub.keywords.get('options') if isinstance(sub, partial) else None
+                self.asyncio_tasks.append({'uuid': conn.uuid, 'config': feed._feed_config, 'overrides': overrides, 'feed': feed, 'task': task})
                 self.timeout[conn.uuid] = timeout
                 feed.start(loop)
 
