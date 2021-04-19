@@ -101,7 +101,7 @@ def setup_signal_handlers(loop):
 
 
 class FeedHandler:
-    def __init__(self, retries=10, timeout_interval=10, log_messages_on_error=False, raw_message_capture=None, config=None, exception_ignore: Optional[List[Exception]] = None):
+    def __init__(self, retries=10, timeout_interval=10, log_messages_on_error=False, raw_message_capture=None, config=None, exception_ignore: Optional[List[Exception]] = None, setup_logging=True):
         """
         retries: int
             number of times the connection will be retried (in the event of a disconnect or other failure)
@@ -130,8 +130,10 @@ class FeedHandler:
             raise ValueError("exception_ignore must be a list of Exceptions or None")
         self.exceptions = exception_ignore
         self.asyncio_tasks = []
+        self.setup_logging = setup_logging
 
-        get_logger('feedhandler', self.config.log.filename, self.config.log.level)
+        if self.setup_logging:
+            get_logger('feedhandler', self.config.log.filename, self.config.log.level)
         if self.config.log_msg:
             LOG.info(self.config.log_msg)
 
