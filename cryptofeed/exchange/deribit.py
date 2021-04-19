@@ -121,6 +121,7 @@ class Deribit(Feed):
             'best_ask_size': Decimal(m.get('best_ask_amount', 0)),
             'bid_iv': Decimal(m.get('bid_iv', 0)),
             'ask_iv': Decimal(m.get('ask_iv', 0)),
+            'mark_iv': Decimal(m.get('mark_iv', 0)),
             **m.get('greeks', {}),  # vega, theta, rho, gamma, delta
         }
         await self.callback(TICKER, feed=self.id,
