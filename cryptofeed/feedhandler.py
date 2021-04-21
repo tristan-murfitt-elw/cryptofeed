@@ -380,6 +380,9 @@ class FeedHandler:
                     await asyncio.sleep(delay)
                     retries += 1
                     delay *= 2
+            except asyncio.CancelledError:
+                LOG.warning("%s: asyncio task cancelled", conn.uuid)
+                return
             except Exception:
                 if self.exceptions:
                     for ex in self.exceptions:
