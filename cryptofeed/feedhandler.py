@@ -42,6 +42,7 @@ from cryptofeed.exchanges import *
 from cryptofeed.providers import *
 from cryptofeed.log import get_logger
 from cryptofeed.nbbo import NBBO
+from cryptofeed.standards import symbol_exchange_to_std
 
 
 LOG = logging.getLogger('feedhandler')
@@ -198,7 +199,11 @@ class FeedHandler:
             feed.start(loop)
             task = loop.create_task(self._connect(conn, sub, handler))
             overrides = sub.keywords.get('options') if isinstance(sub, partial) else None
-            self.asyncio_tasks.append({'uuid': conn.uuid, 'config': f._feed_config, 'overrides': overrides, 'feed': f, 'task': task})
+            self.asyncio_tasks.append({
+                'uuid': conn.uuid, 'exchange': f.id, 'channels': f.channels, 'overrides': overrides,
+                'feed': f, 'task': task, 'symbols': [symbol_exchange_to_std(s) for s in f.symbols],
+                'conn': conn,
+            })
 
     def add_nbbo(self, feeds, symbols, callback, timeout=120):
         """
@@ -247,7 +252,11 @@ class FeedHandler:
                     conn.set_raw_data_callback(self.raw_message_capture)
                 task = loop.create_task(self._connect(conn, sub, handler))
                 overrides = sub.keywords.get('options') if isinstance(sub, partial) else None
-                self.asyncio_tasks.append({'uuid': conn.uuid, 'config': feed._feed_config, 'overrides': overrides, 'feed': feed, 'task': task})
+                self.asyncio_tasks.append({
+                    'uuid': conn.uuid, 'exchange': feed.id, 'channels': feed.channels, 'overrides': overrides,
+                    'feed': feed, 'task': task, 'symbols': [symbol_exchange_to_std(s) for s in feed.symbols],
+                    'conn': conn,
+                })
                 self.timeout[conn.uuid] = timeout
                 feed.start(loop)
 
