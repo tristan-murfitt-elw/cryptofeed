@@ -7,6 +7,7 @@ associated with this software.
 import asyncio
 import logging
 import signal
+import random
 from signal import SIGABRT, SIGINT, SIGTERM
 import sys
 from functools import partial
@@ -372,8 +373,9 @@ class FeedHandler:
                             LOG.warning("%s: encountered exception %s, which is on the ignore list. Raising", conn.uuid, str(e))
                             raise
                 if e.status_code == 429:
-                    LOG.warning("%s: Rate Limited - waiting %d seconds to reconnect", conn.uuid, rate_limited * 60)
-                    await asyncio.sleep(rate_limited * 60)
+                    wait_time = rate_limited * 10 + random.randint(0, 30)
+                    LOG.warning("%s: Rate Limited - waiting %d seconds to reconnect", conn.uuid, wait_time)
+                    await asyncio.sleep(wait_time)
                     rate_limited += 1
                 else:
                     LOG.warning("%s: encountered connection issue %s - reconnecting in %.1f seconds...", conn.uuid, str(e), delay, exc_info=True)
