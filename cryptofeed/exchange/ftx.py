@@ -6,11 +6,12 @@ associated with this software.
 '''
 
 import asyncio
+from collections import defaultdict
 import logging
 from decimal import Decimal
 from time import time
 import zlib
-from typing import Iterable
+from typing import Dict, Iterable, Tuple
 
 import aiohttp
 from sortedcontainers import SortedDict as sd
@@ -22,7 +23,7 @@ from cryptofeed.defines import FTX as FTX_id
 from cryptofeed.defines import FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, SELL, TICKER, TRADES
 from cryptofeed.exceptions import BadChecksum
 from cryptofeed.feed import Feed
-from cryptofeed.standards import symbol_exchange_to_std, timestamp_normalize
+from cryptofeed.standards import timestamp_normalize
 
 
 LOG = logging.getLogger('feedhandler')
@@ -30,6 +31,19 @@ LOG = logging.getLogger('feedhandler')
 
 class FTX(Feed):
     id = FTX_id
+    symbol_endpoint = "https://ftx.com/api/markets"
+
+    @classmethod
+    def _parse_symbol_data(cls, data: dict, symbol_separator: str) -> Tuple[Dict, Dict]:
+        ret = {}
+        info = defaultdict(dict)
+
+        for d in data['result']:
+            normalized = d['name'].replace("/", symbol_separator)
+            symbol = d['name']
+            ret[normalized] = symbol
+            info['tick_size'][normalized] = d['priceIncrement']
+        return ret, info
 
     def __init__(self, **kwargs):
         super().__init__('wss://ftexchange.com/ws/', **kwargs)
@@ -41,8 +55,8 @@ class FTX(Feed):
 
     async def subscribe(self, conn: AsyncConnection):
         self.__reset()
-        for chan in set(self.channels or self.subscription):
-            symbols = set(self.symbols or self.subscription[chan])
+        for chan in self.subscription:
+            symbols = self.subscription[chan]
             if chan == FUNDING:
                 asyncio.create_task(self._funding(symbols))  # TODO: use HTTPAsyncConn
                 continue
@@ -50,7 +64,7 @@ class FTX(Feed):
                 asyncio.create_task(self._open_interest(symbols))  # TODO: use HTTPAsyncConn
                 continue
             for pair in symbols:
-                await conn.send(json.dumps(
+                await conn.write(json.dumps(
                     {
                         "channel": chan,
                         "market": pair,
@@ -153,7 +167,7 @@ class FTX(Feed):
                             self.funding[pair] = update
 
                         await self.callback(FUNDING, feed=self.id,
-                                            symbol=symbol_exchange_to_std(data['result'][0]['future']),
+                                            symbol=self.exchange_symbol_to_std_symbol(data['result'][0]['future']),
                                             rate=data['result'][0]['rate'],
                                             timestamp=timestamp_normalize(self.id, data['result'][0]['time']))
                     await asyncio.sleep(rate_limiter)
@@ -168,21 +182,21 @@ class FTX(Feed):
         """
         for trade in msg['data']:
             await self.callback(TRADES, feed=self.id,
-                                symbol=symbol_exchange_to_std(msg['market']),
+                                symbol=self.exchange_symbol_to_std_symbol(msg['market']),
                                 side=BUY if trade['side'] == 'buy' else SELL,
                                 amount=Decimal(trade['size']),
                                 price=Decimal(trade['price']),
-                                order_id=None,
+                                order_id=trade['id'],
                                 timestamp=float(timestamp_normalize(self.id, trade['time'])),
                                 receipt_timestamp=timestamp)
             if bool(trade['liquidation']):
                 await self.callback(LIQUIDATIONS,
                                     feed=self.id,
-                                    symbol=symbol_exchange_to_std(msg['market']),
+                                    symbol=self.exchange_symbol_to_std_symbol(msg['market']),
                                     side=BUY if trade['side'] == 'buy' else SELL,
                                     leaves_qty=Decimal(trade['size']),
                                     price=Decimal(trade['price']),
-                                    order_id=None,
+                                    order_id=trade['id'],
                                     timestamp=float(timestamp_normalize(self.id, trade['time'])),
                                     receipt_timestamp=timestamp
                                     )
@@ -194,7 +208,7 @@ class FTX(Feed):
         {"channel": "ticker", "market": "BTC/USD", "type": "update", "data": {"bid": 10717.5, "ask": 10719.0,
         "last": 10719.0, "time": 1564834587.1299787}}
         """
-        symbol = symbol_exchange_to_std(msg['market'])
+        symbol = self.exchange_symbol_to_std_symbol(msg['market'])
         extra_fields = {
             'bbo': self.get_book_bbo(symbol),
             'last': msg['data'].get('last'),
@@ -224,7 +238,7 @@ class FTX(Feed):
         check = msg['data']['checksum']
         if msg['type'] == 'partial':
             # snapshot
-            pair = symbol_exchange_to_std(msg['market'])
+            pair = self.exchange_symbol_to_std_symbol(msg['market'])
             self.l2_book[pair] = {
                 BID: sd({
                     Decimal(price): Decimal(amount) for price, amount in msg['data']['bids']
@@ -239,7 +253,7 @@ class FTX(Feed):
         else:
             # update
             delta = {BID: [], ASK: []}
-            pair = symbol_exchange_to_std(msg['market'])
+            pair = self.exchange_symbol_to_std_symbol(msg['market'])
             for side in ('bids', 'asks'):
                 s = BID if side == 'bids' else ASK
                 for price, amount in msg['data'][side]:

@@ -1,5 +1,7 @@
+from collections import defaultdict
 import logging
 from decimal import Decimal
+from typing import Dict, Tuple
 
 from sortedcontainers import SortedDict as sd
 from yapic import json
@@ -8,7 +10,7 @@ from cryptofeed.connection import AsyncConnection
 from cryptofeed.defines import BID, ASK, BUY, DERIBIT, FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, SELL, TICKER, TRADES
 from cryptofeed.feed import Feed
 from cryptofeed.exceptions import MissingSequenceNumber
-from cryptofeed.standards import timestamp_normalize, symbol_exchange_to_std
+from cryptofeed.standards import timestamp_normalize
 
 
 LOG = logging.getLogger('feedhandler')
@@ -16,6 +18,20 @@ LOG = logging.getLogger('feedhandler')
 
 class Deribit(Feed):
     id = DERIBIT
+    symbol_endpoint = ['https://www.deribit.com/api/v2/public/get_instruments?currency=BTC&expired=false', 'https://www.deribit.com/api/v2/public/get_instruments?currency=ETH&expired=false']
+
+    @classmethod
+    def _parse_symbol_data(cls, data: list, symbol_separator: str) -> Tuple[Dict, Dict]:
+        ret = {}
+        info = defaultdict(dict)
+
+        for entry in data:
+            for e in entry['result']:
+                split = e['instrument_name'].split("-")
+                normalized = split[0] + symbol_separator + e['quote_currency'] + "-" + '-'.join(split[1:])
+                ret[normalized] = e['instrument_name']
+                info['tick_size'][normalized] = e['tick_size']
+        return ret, info
 
     def __init__(self, **kwargs):
         super().__init__('wss://www.deribit.com/ws/api/v2', **kwargs)
@@ -54,7 +70,7 @@ class Deribit(Feed):
         for trade in msg["params"]["data"]:
             await self.callback(TRADES,
                                 feed=self.id,
-                                symbol=symbol_exchange_to_std(trade["instrument_name"]),
+                                symbol=self.exchange_symbol_to_std_symbol(trade["instrument_name"]),
                                 order_id=trade['trade_id'],
                                 side=BUY if trade['direction'] == 'buy' else SELL,
                                 amount=Decimal(trade['amount']),
@@ -65,7 +81,7 @@ class Deribit(Feed):
             if 'liquidation' in trade:
                 await self.callback(LIQUIDATIONS,
                                     feed=self.id,
-                                    symbol=symbol_exchange_to_std(trade["instrument_name"]),
+                                    symbol=self.exchange_symbol_to_std_symbol(trade["instrument_name"]),
                                     side=BUY if trade['direction'] == 'buy' else SELL,
                                     leaves_qty=Decimal(trade['amount']),
                                     price=Decimal(trade['price']),
@@ -106,7 +122,7 @@ class Deribit(Feed):
             "method" : "subscription",
             "jsonrpc" : "2.0"}
         '''
-        pair = symbol_exchange_to_std(msg['params']['data']['instrument_name'])
+        pair = self.exchange_symbol_to_std_symbol(msg['params']['data']['instrument_name'])
         ts = timestamp_normalize(self.id, msg['params']['data']['timestamp'])
         m = msg['params']['data']
         extra_fields = {
@@ -155,10 +171,10 @@ class Deribit(Feed):
         self.__reset()
         client_id = 0
         channels = []
-        for chan in set(self.channels or self.subscription):
-            for pair in set(self.symbols or self.subscription[chan]):
+        for chan in self.subscription:
+            for pair in self.subscription[chan]:
                 channels.append(f"{chan}.{pair}.raw")
-        await conn.send(json.dumps(
+        await conn.write(json.dumps(
             {
                 "jsonrpc": "2.0",
                 "id": client_id,
@@ -187,7 +203,7 @@ class Deribit(Feed):
         }
         """
         ts = msg["params"]["data"]["timestamp"]
-        pair = symbol_exchange_to_std(msg["params"]["data"]["instrument_name"])
+        pair = self.exchange_symbol_to_std_symbol(msg["params"]["data"]["instrument_name"])
         self.l2_book[pair] = {
             BID: sd({
                 Decimal(price): Decimal(amount)
@@ -206,7 +222,7 @@ class Deribit(Feed):
 
     async def _book_update(self, msg: dict, timestamp: float):
         ts = msg["params"]["data"]["timestamp"]
-        pair = symbol_exchange_to_std(msg["params"]["data"]["instrument_name"])
+        pair = self.exchange_symbol_to_std_symbol(msg["params"]["data"]["instrument_name"])
 
         if msg['params']['data']['prev_change_id'] != self.seq_no[pair]:
             LOG.warning("%s: Missing sequence number detected for %s", self.id, pair)
