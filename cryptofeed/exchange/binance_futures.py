@@ -68,7 +68,7 @@ class BinanceFutures(Binance):
         }
         """
         pair = msg['symbol']
-        oi = msg['openInterest']
+        oi = Decimal(msg['openInterest'])
         if oi != self.open_interest.get(pair, None):
             await self.callback(OPEN_INTEREST,
                                 feed=self.id,
