@@ -33,6 +33,7 @@ HUOBI_DM = 'HUOBI_DM'
 HUOBI_SWAP = 'HUOBI_SWAP'
 KRAKEN = 'KRAKEN'
 KRAKEN_FUTURES = 'KRAKEN_FUTURES'
+KUCOIN = 'KUCOIN'
 OKCOIN = 'OKCOIN'
 OKEX = 'OKEX'
 POLONIEX = 'POLONIEX'
@@ -42,7 +43,6 @@ BITMAX = 'BITMAX'
 UPBIT = 'UPBIT'
 
 COINGECKO = 'COINGECKO'
-WHALE_ALERT = 'WHALE_ALERT'
 
 
 # Market Data
@@ -51,14 +51,12 @@ L3_BOOK = 'l3_book'
 BOOK_DELTA = 'book_delta'
 TRADES = 'trades'
 TICKER = 'ticker'
-VOLUME = 'volume'
 FUNDING = 'funding'
 OPEN_INTEREST = 'open_interest'
 LIQUIDATIONS = 'liquidations'
 FUTURES_INDEX = 'futures_index'
 UNSUPPORTED = 'unsupported'
 MARKET_INFO = 'market_info'
-TRANSACTIONS = 'transactions'
 CANDLES = 'candles'
 
 # Account Data / Authenticated Channels
@@ -84,6 +82,7 @@ PENDING = 'pending'
 FILLED = 'filled'
 PARTIAL = 'partial'
 CANCELLED = 'cancelled'
+UNFILLED = 'unfilled'
 
 
 """

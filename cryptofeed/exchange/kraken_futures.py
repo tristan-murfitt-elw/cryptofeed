@@ -4,8 +4,10 @@ Copyright (C) 2017-2021  Bryant Moscon - bmoscon@gmail.com
 Please see the LICENSE file for the terms and conditions
 associated with this software.
 '''
+from collections import defaultdict
 import logging
 from decimal import Decimal
+from typing import Dict, Tuple
 
 from sortedcontainers import SortedDict as sd
 from yapic import json
@@ -14,7 +16,7 @@ from cryptofeed.connection import AsyncConnection
 from cryptofeed.defines import BID, ASK, BUY, FUNDING, KRAKEN_FUTURES, L2_BOOK, OPEN_INTEREST, SELL, TICKER, TRADES
 from cryptofeed.exceptions import MissingSequenceNumber
 from cryptofeed.feed import Feed
-from cryptofeed.standards import timestamp_normalize, symbol_exchange_to_std
+from cryptofeed.standards import timestamp_normalize
 
 
 LOG = logging.getLogger('feedhandler')
@@ -22,6 +24,36 @@ LOG = logging.getLogger('feedhandler')
 
 class KrakenFutures(Feed):
     id = KRAKEN_FUTURES
+    symbol_endpoint = 'https://futures.kraken.com/derivatives/api/v3/instruments'
+
+    @classmethod
+    def _parse_symbol_data(cls, data: dict, symbol_separator: str) -> Tuple[Dict, Dict]:
+        _kraken_futures_product_type = {
+            'FI': 'Inverse Futures',
+            'FV': 'Vanilla Futures',
+            'PI': 'Perpetual Inverse Futures',
+            'PV': 'Perpetual Vanilla Futures',
+            'IN': 'Real Time Index',
+            'RR': 'Reference Rate',
+        }
+        ret = {}
+        info = defaultdict(dict)
+
+        data = data['instruments']
+        for entry in data:
+            if not entry['tradeable']:
+                continue
+            normalized = entry['symbol'].upper().replace("_", "-")
+            symbol = normalized[3:6] + symbol_separator + normalized[6:9]
+            normalized = normalized.replace(normalized[3:9], symbol)
+            normalized = normalized.replace('XBT', 'BTC')
+
+            info['tick_size'][normalized] = entry['tickSize']
+            info['contract_size'][normalized] = entry['contractSize']
+            info['underlying'][normalized] = entry['underlying']
+            info['product_type'][normalized] = _kraken_futures_product_type[normalized[:2]]
+            ret[normalized] = entry['symbol']
+        return ret, info
 
     def __init__(self, **kwargs):
         super().__init__('wss://futures.kraken.com/ws/v1', **kwargs)
@@ -34,12 +66,12 @@ class KrakenFutures(Feed):
 
     async def subscribe(self, conn: AsyncConnection):
         self.__reset()
-        for chan in set(self.channels or self.subscription):
-            await conn.send(json.dumps(
+        for chan in self.subscription:
+            await conn.write(json.dumps(
                 {
                     "event": "subscribe",
                     "feed": chan,
-                    "product_ids": list(self.symbols or self.subscription[chan])
+                    "product_ids": self.subscription[chan]
                 }
             ))
 
@@ -206,7 +238,7 @@ class KrakenFutures(Feed):
             else:
                 LOG.warning("%s: Invalid message type %s", self.id, msg)
         else:
-            pair = symbol_exchange_to_std(msg['product_id'])
+            pair = self.exchange_symbol_to_std_symbol(msg['product_id'])
             if msg['feed'] == 'trade':
                 await self._trade(msg, pair, timestamp)
             elif msg['feed'] == 'trade_snapshot':
