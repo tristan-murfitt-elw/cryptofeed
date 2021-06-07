@@ -217,7 +217,7 @@ class Kraken(Feed):
         await self.callback(CANDLES,
                             feed=self.id,
                             symbol=pair,
-                            timestamp=start,
+                            timestamp=float(start),
                             receipt_timestamp=timestamp,
                             start=float(end) - (interval * 60),
                             stop=float(end),
