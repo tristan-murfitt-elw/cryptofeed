@@ -303,6 +303,7 @@ class Bitfinex(Feed):
         elif 'event' not in msg:
             LOG.warning('%s: Unexpected msg (missing event) from exchange: %s', conn.uuid, msg)
         elif msg['event'] == 'error':
+            # commonly get 'symbol: invalid' for certain funding symbols (eg. fGNT) but not others. Does symbols API provide us with an "is_supported_on_socket" field?
             LOG.error('%s: Error from exchange: %s', conn.uuid, msg)
         elif msg['event'] in ('info', 'conf'):
             LOG.info('%s: %s from exchange: %s', conn.uuid, msg['event'], msg)
