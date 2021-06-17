@@ -8,6 +8,7 @@ import asyncio
 import logging
 from socket import error as socket_error
 import time
+import random
 from typing import Awaitable
 import zlib
 
@@ -81,8 +82,9 @@ class ConnectionHandler:
                             LOG.warning("%s: encountered exception %s, which is on the ignore list. Raising", self.conn.uuid, str(e))
                             raise
                 if e.status_code == 429:
-                    LOG.warning("%s: Rate Limited - waiting %d seconds to reconnect", self.conn.uuid, rate_limited * 60)
-                    await asyncio.sleep(rate_limited * 60)
+                    wait_time = rate_limited * 10 + random.randint(0, 30)
+                    LOG.warning("%s: Rate Limited - waiting %d seconds to reconnect", self.conn.uuid, wait_time)
+                    await asyncio.sleep(wait_time)
                     rate_limited += 1
                 else:
                     LOG.warning("%s: encountered connection issue %s - reconnecting in %.1f seconds...", self.conn.uuid, str(e), delay, exc_info=True)
