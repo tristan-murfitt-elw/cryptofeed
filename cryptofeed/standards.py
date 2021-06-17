@@ -10,11 +10,13 @@ between exchanges. These include trading symbols, timestamps, and
 data channel names
 '''
 import logging
+import datetime as dt
 
-from cryptofeed.defines import (BINANCE, BINANCE_DELIVERY, BINANCE_FUTURES, BINANCE_US, BITCOINCOM, BITFLYER, BITFINEX, BITMAX, BITMEX,
+from cryptofeed.defines import (BINANCE, BINANCE_DELIVERY, BINANCE_FUTURES, BINANCE_US, BITCOINCOM, BITFLYER, BITFINEX,
+                                BITHUMB, BITMAX, BITMEX,
                                 BITSTAMP, BITTREX, BLOCKCHAIN, BYBIT, CANDLES, COINBASE, COINGECKO,
                                 DERIBIT, EXX, FTX, FTX_US, GATEIO, GEMINI, HITBTC, HUOBI, HUOBI_DM, HUOBI_SWAP,
-                                KRAKEN, KRAKEN_FUTURES, KUCOIN, OKCOIN, OKEX, POLONIEX, PROBIT, UPBIT)
+                                KRAKEN, KRAKEN_FUTURES, KUCOIN, OKCOIN, OKEX, POLONIEX, PROBIT, UPBIT, USER_FILLS)
 from cryptofeed.defines import (FILL_OR_KILL, IMMEDIATE_OR_CANCEL, LIMIT, MAKER_OR_CANCEL, MARKET, UNSUPPORTED)
 from cryptofeed.defines import (FUNDING, FUTURES_INDEX, L2_BOOK, L3_BOOK, LIQUIDATIONS, OPEN_INTEREST, MARKET_INFO,
                                 TICKER, TRADES, ORDER_INFO)
@@ -30,19 +32,23 @@ def timestamp_normalize(exchange, ts):
             return ts / 1000
         else:
             return ts.timestamp()
-    if exchange in {BITFLYER, COINBASE, BLOCKCHAIN, BITMEX, HITBTC, OKCOIN, OKEX, FTX, FTX_US, BITCOINCOM, PROBIT, COINGECKO}:
+    if exchange in {BITFLYER, COINBASE, BLOCKCHAIN, BITMEX, HITBTC, OKCOIN, OKEX, FTX, FTX_US, BITCOINCOM, PROBIT, COINGECKO, BITTREX}:
         return ts.timestamp()
     elif exchange in {HUOBI, HUOBI_DM, HUOBI_SWAP, BITFINEX, DERIBIT, BINANCE, BINANCE_US, BINANCE_FUTURES,
-                      BINANCE_DELIVERY, GEMINI, BITTREX, BITMAX, KRAKEN_FUTURES, UPBIT}:
+                      BINANCE_DELIVERY, GEMINI, BITMAX, KRAKEN_FUTURES, UPBIT}:
         return ts / 1000.0
     elif exchange in {BITSTAMP}:
         return ts / 1000000.0
+    elif exchange in {BITHUMB}:
+        return (ts - dt.timedelta(hours=9)).timestamp()
+    # return (dt.datetime.strptime(ts, "%Y-%m-%d %H:%M:%S") - dt.timedelta(hours=9)).timestamp()
 
 
 _feed_to_exchange_map = {
     L2_BOOK: {
         BITFINEX: 'book-P0-F0-100',
         BITFLYER: 'lightning_board_{}',
+        BITHUMB: 'orderbookdepth',
         POLONIEX: L2_BOOK,
         HITBTC: 'subscribeOrderbook',
         COINBASE: 'level2',
@@ -66,7 +72,7 @@ _feed_to_exchange_map = {
         FTX: 'orderbook',
         FTX_US: 'orderbook',
         GEMINI: L2_BOOK,
-        BITTREX: 'SubscribeToExchangeDeltas',
+        BITTREX: 'orderbook_{}_{}',
         BITCOINCOM: 'subscribeOrderbook',
         BITMAX: "depth:",
         UPBIT: L2_BOOK,
@@ -75,7 +81,9 @@ _feed_to_exchange_map = {
         KUCOIN: '/market/level2'
     },
     L3_BOOK: {
+        BITTREX: UNSUPPORTED,
         BITFINEX: 'book-R0-F0-100',
+        BITHUMB: UNSUPPORTED,
         BITSTAMP: 'detail_order_book',
         HITBTC: UNSUPPORTED,
         COINBASE: 'full',
@@ -108,6 +116,7 @@ _feed_to_exchange_map = {
         BITSTAMP: 'live_trades',
         BITFINEX: 'trades',
         BITFLYER: 'lightning_executions_{}',
+        BITHUMB: 'transaction',
         COINBASE: 'matches',
         BITMEX: 'trade',
         KRAKEN: 'trade',
@@ -128,7 +137,7 @@ _feed_to_exchange_map = {
         FTX: 'trades',
         FTX_US: 'trades',
         GEMINI: TRADES,
-        BITTREX: TRADES,
+        BITTREX: 'trade_{}',
         BITCOINCOM: 'subscribeTrades',
         BITMAX: "trades:",
         UPBIT: TRADES,
@@ -160,13 +169,14 @@ _feed_to_exchange_map = {
         FTX: "ticker",
         FTX_US: "ticker",
         GEMINI: UNSUPPORTED,
-        BITTREX: 'SubscribeToSummaryDeltas',
+        BITTREX: 'ticker_{}',
         BITCOINCOM: 'subscribeTicker',
         BITMAX: UNSUPPORTED,
         UPBIT: UNSUPPORTED,
         GATEIO: 'spot.tickers',
         PROBIT: UNSUPPORTED,
-        KUCOIN: '/market/ticker'
+        KUCOIN: '/market/ticker',
+        BITHUMB: UNSUPPORTED
     },
     FUNDING: {
         BITMEX: 'funding',
@@ -207,6 +217,9 @@ _feed_to_exchange_map = {
         GEMINI: ORDER_INFO,
         OKEX: ORDER_INFO
     },
+    USER_FILLS: {
+        FTX: 'fills',
+    },
     CANDLES: {
         BINANCE: 'kline_',
         BINANCE_US: 'kline_',
@@ -215,7 +228,8 @@ _feed_to_exchange_map = {
         HUOBI: 'kline',
         GATEIO: 'spot.candlesticks',
         KUCOIN: '/market/candles',
-        KRAKEN: 'ohlc'
+        KRAKEN: 'ohlc',
+        BITTREX: 'candle_{}_{}'
     }
 }
 
@@ -295,4 +309,4 @@ def normalize_channel(exchange: str, feed: str) -> str:
 
 
 def is_authenticated_channel(channel: str) -> bool:
-    return channel in (ORDER_INFO)
+    return channel in (ORDER_INFO, USER_FILLS)

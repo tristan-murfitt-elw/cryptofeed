@@ -10,6 +10,7 @@ as well as some documentation (in comment form) regarding
 the book definitions and structure
 '''
 BITFINEX = 'BITFINEX'
+BITHUMB = 'BITHUMB'
 BITMEX = 'BITMEX'
 BINANCE = 'BINANCE'
 BINANCE_US = 'BINANCE_US'
@@ -61,6 +62,7 @@ CANDLES = 'candles'
 
 # Account Data / Authenticated Channels
 ORDER_INFO = 'order_info'
+USER_FILLS = 'user_fills'
 
 
 BUY = 'buy'
@@ -83,6 +85,13 @@ FILLED = 'filled'
 PARTIAL = 'partial'
 CANCELLED = 'cancelled'
 UNFILLED = 'unfilled'
+
+
+# HTTP methods
+GET = 'GET'
+DELETE = 'DELETE'
+PUT = 'PUT'
+POST = 'POST'
 
 
 """

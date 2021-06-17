@@ -1,6 +1,16 @@
 ## Changelog
 
-### 1.9.1
+### 1.9.2
+  * Bugfix: add config kwarg to add_nbbo method
+  * Update: changed KuCoin authentication to match new signing method
+  * Bugfix: #518 - fix aggregator example code
+  * Update: Support Bittrex V3
+  * Feature: Add support for candles on Bittrex
+  * Feature: Add support to authenticate private channels (e.g. USER_FILLS) on FTX
+  * Feature: Support private rest api commands for FTX
+
+### 1.9.1 (2021-06-10)
+  * Feature: add Bithumb exchange - l2 book and trades
   * Bugfix: Fix inverted Poloniex symbols
   * Feature: simplify and cleanup parts of Poloniex
   * Feature: add `symbols` class method to all exchanges to get list of supported trading pairs
@@ -18,6 +28,8 @@
   * Feature: Kraken Candle support
   * Update: Remove deprecated channel mapping from Kraken, use channel name from message instead
   * Bugfix: change Kraken Futures to use the standard symbol to be consistent with the rest of the library
+  * Update: use Kucoin v3 endpoint for orderbook snapshot (v2 deprecated).
+  * Update: Poloniex ticker message format update 
 
 ### 1.9.0 (2021-04-25)
   * Bugfix: Fix Binance subscriptions when subscribing to more than one candle
