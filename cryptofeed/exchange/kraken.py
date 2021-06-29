@@ -48,7 +48,7 @@ class Kraken(Feed):
             ret[normalized] = exch
         return ret, {}
 
-    def __init__(self, candle_interval='1m', max_depth=1000, **kwargs):
+    def __init__(self, candle_interval='1m', max_depth=None, **kwargs):
         lookup = {'1m': 1, '5m': 5, '15m': 15, '30m': 30, '1h': 60, '4h': 240, '1d': 1440, '1w': 10080, '15d': 21600}
         self.candle_interval = lookup[candle_interval]
         self.normalize_interval = {value: key for key, value in lookup.items()}
@@ -94,7 +94,7 @@ class Kraken(Feed):
         symbols = options[1]
         sub = {"name": chan}
         if normalize_channel(self.id, chan) == L2_BOOK:
-            max_depth = self.max_depth if self.max_depth else 1000
+            max_depth = self.max_depth if self.max_depth else self.valid_depths[-1]
             if max_depth not in self.valid_depths:
                 for d in self.valid_depths:
                     if d > max_depth:
@@ -186,11 +186,15 @@ class Kraken(Feed):
                             else:
                                 delta[side].append((price, size))
                                 self.l2_book[pair][side][price] = size
-            for side in (BID, ASK):
-                while len(self.l2_book[pair][side]) > self.max_depth:
-                    del_price = self.l2_book[pair][side].items()[0 if side == BID else -1][0]
-                    del self.l2_book[pair][side][del_price]
-                    delta[side].append((del_price, 0))
+
+            if self.max_depth:
+                for side in (BID, ASK):
+                    n_extras = len(self.l2_book[pair][side]) - self.max_depth
+                    tail_idx = 0 if side == BID else -1
+                    delta[side].extend([
+                        (self.l2_book[pair][side].popitem(tail_idx)[0], 0)
+                        for _ in range(n_extras)
+                    ])
 
             if self.checksum_validation and 'c' in msg[0] and self.__calc_checksum(pair) != msg[0]['c']:
                 raise BadChecksum("Checksum validation on orderbook failed")
