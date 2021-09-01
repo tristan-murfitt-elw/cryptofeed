@@ -6,6 +6,8 @@ associated with this software.
 '''
 from collections import defaultdict
 import logging
+import time
+import asyncio
 from decimal import Decimal
 from typing import Dict, Tuple
 
@@ -13,10 +15,10 @@ from sortedcontainers import SortedDict as sd
 from yapic import json
 
 from cryptofeed.connection import AsyncConnection
-from cryptofeed.defines import BID, ASK, BUY, FUNDING, KRAKEN_FUTURES, L2_BOOK, OPEN_INTEREST, SELL, TICKER, TRADES
+from cryptofeed.defines import BID, ASK, BUY, FUNDING, KRAKEN_FUTURES, L2_BOOK, OPEN_INTEREST, UNDERLYING_INDEX, SELL, TICKER, TRADES
 from cryptofeed.exceptions import MissingSequenceNumber
 from cryptofeed.feed import Feed
-from cryptofeed.standards import timestamp_normalize
+from cryptofeed.standards import feed_to_exchange, timestamp_normalize
 
 
 LOG = logging.getLogger('feedhandler')
@@ -24,7 +26,10 @@ LOG = logging.getLogger('feedhandler')
 
 class KrakenFutures(Feed):
     id = KRAKEN_FUTURES
+    api = 'https://futures.kraken.com/derivatives/api'
     symbol_endpoint = 'https://futures.kraken.com/derivatives/api/v3/instruments'
+    index_product_type = 'Real Time Index'
+    index_product_prefix = 'in'
 
     @classmethod
     def _parse_symbol_data(cls, data: dict, symbol_separator: str) -> Tuple[Dict, Dict]:
@@ -33,7 +38,7 @@ class KrakenFutures(Feed):
             'FV': 'Vanilla Futures',
             'PI': 'Perpetual Inverse Futures',
             'PV': 'Perpetual Vanilla Futures',
-            'IN': 'Real Time Index',
+            'IN': cls.index_product_type,
             'RR': 'Reference Rate',
         }
         ret = {}
@@ -41,19 +46,28 @@ class KrakenFutures(Feed):
 
         data = data['instruments']
         for entry in data:
-            if not entry['tradeable']:
-                continue
             normalized = entry['symbol'].upper().replace("_", "-")
             symbol = normalized[3:6] + symbol_separator + normalized[6:9]
             normalized = normalized.replace(normalized[3:9], symbol)
             normalized = normalized.replace('XBT', 'BTC')
-
-            info['tick_size'][normalized] = entry['tickSize']
-            info['contract_size'][normalized] = entry['contractSize']
-            info['underlying'][normalized] = entry['underlying']
-            info['product_type'][normalized] = _kraken_futures_product_type[normalized[:2]]
+            
+            if entry['tradeable']:
+                info['tick_size'][normalized] = entry['tickSize']
+                info['contract_size'][normalized] = entry['contractSize']
+                info['underlying'][normalized] = entry['underlying']
+                info['product_type'][normalized] = _kraken_futures_product_type[normalized[:2]]
+            else:
+                if entry['symbol'][:2] == cls.index_product_prefix: # Index
+                    normalized = f'.{normalized}'
+                    info['product_type'][normalized] = _kraken_futures_product_type[normalized[1:3]]
+                else:
+                    continue
             ret[normalized] = entry['symbol']
         return ret, info
+
+    @classmethod
+    def product_type(cls, symbol: str):
+        return cls.info()['product_type'][symbol]
 
     def __init__(self, **kwargs):
         super().__init__('wss://futures.kraken.com/ws/v1', **kwargs)
@@ -67,13 +81,16 @@ class KrakenFutures(Feed):
     async def subscribe(self, conn: AsyncConnection):
         self.__reset()
         for chan in self.subscription:
-            await conn.write(json.dumps(
-                {
-                    "event": "subscribe",
-                    "feed": chan,
-                    "product_ids": self.subscription[chan]
-                }
-            ))
+            if chan == feed_to_exchange(self.id, UNDERLYING_INDEX):
+                asyncio.create_task(self._index_price(self.subscription[chan]))
+            else:
+                await conn.write(json.dumps(
+                    {
+                        "event": "subscribe",
+                        "feed": chan,
+                        "product_ids": self.subscription[chan]
+                    }
+                ))
 
     async def _trade(self, msg: dict, pair: str, timestamp: float):
         """
@@ -225,6 +242,34 @@ class KrakenFutures(Feed):
                             timestamp=timestamp_normalize(self.id, msg['time']),
                             receipt_timestamp=timestamp
                             )
+
+    async def _index_price(self, pairs: list):
+        # Continously poll list of tickers from the REST API to get most recent index price
+        last_update = {}
+
+        while True:
+            # Fetch all tickers
+            end_point = f"{self.api}/v3/tickers"
+            data = await self.http_conn.read(end_point)
+            data = json.loads(data, parse_float=Decimal)
+            timestamp = time.time()
+            for ticker in data['tickers']:
+                if ticker['symbol'] not in pairs or self.product_type(self.exchange_symbol_to_std_symbol(ticker['symbol'])) != self.index_product_type:
+                    continue
+                
+                # Check if values have changed
+                if ticker == last_update.get(ticker['symbol']):
+                    continue
+
+                await self.callback(UNDERLYING_INDEX,
+                                            feed=self.id,
+                                            symbol=self.exchange_symbol_to_std_symbol(ticker['symbol']),
+                                            timestamp=ticker['lastTime'].timestamp(),
+                                            receipt_timestamp=timestamp,
+                                            price=Decimal(ticker['last'])
+                                            )
+                last_update[ticker['symbol']] = ticker
+            await asyncio.sleep(1)
 
     async def message_handler(self, msg: str, conn, timestamp: float):
 

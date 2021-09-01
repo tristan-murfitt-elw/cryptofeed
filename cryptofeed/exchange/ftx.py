@@ -10,6 +10,7 @@ from collections import defaultdict
 import logging
 from decimal import Decimal
 import hmac
+from os import CLD_CONTINUED
 from time import time
 import zlib
 from typing import Dict, Iterable, Tuple
@@ -21,10 +22,10 @@ from yapic import json
 from cryptofeed.connection import AsyncConnection
 from cryptofeed.defines import BID, ASK, BUY, USER_FILLS
 from cryptofeed.defines import FTX as FTX_id
-from cryptofeed.defines import FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, SELL, TICKER, TRADES, FILLED
+from cryptofeed.defines import FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, UNDERLYING_INDEX, SELL, TICKER, TRADES, FILLED
 from cryptofeed.exceptions import BadChecksum
 from cryptofeed.feed import Feed
-from cryptofeed.standards import is_authenticated_channel, normalize_channel, timestamp_normalize
+from cryptofeed.standards import feed_to_exchange, is_authenticated_channel, normalize_channel, timestamp_normalize
 
 
 LOG = logging.getLogger('feedhandler')
@@ -32,6 +33,7 @@ LOG = logging.getLogger('feedhandler')
 
 class FTX(Feed):
     id = FTX_id
+    api = "https://ftx.com/api"
     symbol_endpoint = "https://ftx.com/api/markets"
 
     @classmethod
@@ -44,7 +46,22 @@ class FTX(Feed):
             symbol = d['name']
             ret[normalized] = symbol
             info['tick_size'][normalized] = d['priceIncrement']
+            if symbol[-4:] == 'PERP':
+                # Add an index symbol
+                underlying = d['underlying']
+                index_normalized = f'.{underlying}{symbol_separator}USD'
+                ret[index_normalized] = index_normalized
+                info['underlying_index'][index_normalized] = symbol
+                info['no_ws'][index_normalized] = True
         return ret, info
+
+    @classmethod
+    def underlying_index(cls, symbol: str):
+        return cls.info()['underlying_index'].get(symbol, None)
+
+    @classmethod
+    def no_ws(cls, symbol: str):
+        return cls.info()['no_ws'].get(symbol, False)
 
     def __init__(self, **kwargs):
         super().__init__('wss://ftexchange.com/ws/', **kwargs)
@@ -81,6 +98,9 @@ class FTX(Feed):
             if chan == OPEN_INTEREST:
                 asyncio.create_task(self._open_interest(symbols))  # TODO: use HTTPAsyncConn
                 continue
+            if chan == feed_to_exchange(self.id, UNDERLYING_INDEX):
+                asyncio.create_task(self._index_price(symbols))
+                continue
             if is_authenticated_channel(normalize_channel(self.id, chan)):
                 await conn.write(json.dumps(
                     {
@@ -90,13 +110,14 @@ class FTX(Feed):
                 ))
                 continue
             for pair in symbols:
-                await conn.write(json.dumps(
-                    {
-                        "channel": chan,
-                        "market": pair,
-                        "op": "subscribe"
-                    }
-                ))
+                if not self.no_ws(pair):
+                    await conn.write(json.dumps(
+                        {
+                            "channel": chan,
+                            "market": pair,
+                            "op": "subscribe"
+                        }
+                    ))
 
     def __calc_checksum(self, pair):
         bid_it = reversed(self.l2_book[pair][BID])
@@ -331,6 +352,34 @@ class FTX(Feed):
                             trade_id=fill['tradeId'],
                             timestamp=float(timestamp_normalize(self.id, fill['time'])),
                             receipt_timestamp=timestamp)
+
+    async def _index_price(self, pairs: list):
+        # Continously poll list of tickers from the REST API to get most recent index price
+        last_update = {}
+
+        while True:
+            # Fetch all futures we are subscribed to. Unfortunately the Kraken Futures API doesn't allow us to only fetch the futures we need
+            for index_name in pairs:
+                future_name = self.underlying_index(index_name)
+                if not future_name:
+                    continue
+                end_point = f"{self.api}/futures/{future_name}"
+                data = await self.http_conn.read(end_point)
+                data = json.loads(data, parse_float=Decimal)
+                timestamp = time()
+                future = data['result']
+
+                if future == last_update.get(future['name']):
+                        continue
+                await self.callback(UNDERLYING_INDEX,
+                                            feed=self.id,
+                                            symbol=self.exchange_symbol_to_std_symbol(index_name),
+                                            timestamp=timestamp,
+                                            receipt_timestamp=timestamp,
+                                            price=Decimal(future['index'])
+                                            )
+                last_update[future['name']] = future
+            await asyncio.sleep(1)
 
     async def message_handler(self, msg: str, conn, timestamp: float):
         msg = json.loads(msg, parse_float=Decimal)

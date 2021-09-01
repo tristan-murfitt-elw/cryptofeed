@@ -95,8 +95,9 @@ class FundingCallback(Callback):
     pass
 
 
-class FuturesIndexCallback(Callback):
-    pass
+class UnderlyingIndexCallback(Callback):
+    async def __call__(self, *, feed: str, symbol: str, price: Decimal, timestamp: float, receipt_timestamp: float):
+        await super().__call__(feed, symbol, price, timestamp, receipt_timestamp)
 
 
 class MarketInfoCallback(Callback):

@@ -18,7 +18,7 @@ from cryptofeed.defines import (BINANCE, BINANCE_DELIVERY, BINANCE_FUTURES, BINA
                                 DERIBIT, EXX, FTX, FTX_US, GATEIO, GEMINI, HITBTC, HUOBI, HUOBI_DM, HUOBI_SWAP,
                                 KRAKEN, KRAKEN_FUTURES, KUCOIN, OKCOIN, OKEX, POLONIEX, PROBIT, UPBIT, USER_FILLS)
 from cryptofeed.defines import (FILL_OR_KILL, IMMEDIATE_OR_CANCEL, LIMIT, MAKER_OR_CANCEL, MARKET, UNSUPPORTED)
-from cryptofeed.defines import (FUNDING, FUTURES_INDEX, L2_BOOK, L3_BOOK, LIQUIDATIONS, OPEN_INTEREST, MARKET_INFO,
+from cryptofeed.defines import (FUNDING, UNDERLYING_INDEX, L2_BOOK, L3_BOOK, LIQUIDATIONS, OPEN_INTEREST, MARKET_INFO,
                                 TICKER, TRADES, ORDER_INFO)
 from cryptofeed.exceptions import UnsupportedDataFeed, UnsupportedTradingOption
 
@@ -210,8 +210,15 @@ _feed_to_exchange_map = {
     MARKET_INFO: {
         COINGECKO: MARKET_INFO
     },
-    FUTURES_INDEX: {
-        BYBIT: 'instrument_info.100ms'
+    UNDERLYING_INDEX: {
+        BINANCE_FUTURES: 'markPrice',
+        BINANCE_DELIVERY: 'indexPrice',
+        BITMEX: 'trade',
+        BYBIT: 'instrument_info.100ms',
+        DERIBIT: 'deribit_price_index',
+        FTX: UNDERLYING_INDEX,
+        KRAKEN_FUTURES: UNDERLYING_INDEX,
+        OKEX: '{}/ticker'
     },
     ORDER_INFO: {
         GEMINI: ORDER_INFO,

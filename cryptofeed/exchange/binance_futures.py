@@ -115,7 +115,7 @@ class BinanceFutures(Binance):
         elif msg_type == 'forceOrder':
             await self._liquidations(msg, timestamp)
         elif msg_type == 'markPriceUpdate':
-            await self._funding(msg, timestamp)
+            await self._funding_with_index_price(msg, timestamp)    # Same channel for two updates
         elif msg['e'] == 'kline':
             await self._candle(msg, timestamp)
         else:

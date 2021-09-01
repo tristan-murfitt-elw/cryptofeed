@@ -13,7 +13,7 @@ from sortedcontainers import SortedDict as sd
 from yapic import json
 
 from cryptofeed.connection import AsyncConnection, HTTPPoll
-from cryptofeed.defines import BID, ASK, BINANCE, BUY, CANDLES, FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, SELL, TICKER, TRADES, FILLED, UNFILLED
+from cryptofeed.defines import BID, ASK, BINANCE, BUY, CANDLES, FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, UNDERLYING_INDEX, SELL, TICKER, TRADES, FILLED, UNFILLED
 from cryptofeed.feed import Feed
 from cryptofeed.standards import timestamp_normalize, normalize_channel
 
@@ -40,9 +40,15 @@ class Binance(Feed):
             split = len(symbol['baseAsset'])
             normalized = symbol['symbol'][:split] + symbol_separator + symbol['symbol'][split:]
             ret[normalized] = symbol['symbol']
+
+            # Add subscribeable symbol for an index
+            index = '.' + symbol['pair'][:split] + symbol_separator + symbol['pair'][split:]
+            ret[index] = symbol['pair']
+
             info['tick_size'][normalized] = symbol['filters'][0]['tickSize']
             if "contractType" in symbol:
                 info['contract_type'][normalized] = symbol['contractType']
+        print(ret)
         return ret, info
 
     def __init__(self, candle_interval='1m', candle_closed_only=False, **kwargs):
@@ -310,7 +316,62 @@ class Binance(Feed):
                             rate=msg['r'],
                             next_funding_time=timestamp_normalize(self.id, msg['T']),
                             )
+    
+    async def _funding_with_index_price(self, msg: dict, timestamp: float):
+        """
+        {
+            "e": "markPriceUpdate",     // Event type
+            "E": 1562305380000,         // Event time
+            "s": "BTCUSDT",             // Symbol
+            "p": "11794.15000000",      // Mark price
+            "i": "11784.62659091",      // Index price
+            "P": "11784.25641265",      // Estimated Settle Price, only useful in the last hour before the settlement starts
+            "r": "0.00038167",          // Funding rate
+            "T": 1562306400000          // Next funding time
+        }
+        """
+        symbol = self.exchange_symbol_to_std_symbol(msg['s'])
+        ts = timestamp_normalize(self.id, msg['E'])
 
+        await self.callback(FUNDING,
+                            feed=self.id,
+                            symbol=symbol,
+                            timestamp=ts,
+                            receipt_timestamp=timestamp,
+                            mark_price=msg['p'],
+                            rate=msg['r'],
+                            next_funding_time=timestamp_normalize(self.id, msg['T']),
+                            )
+
+        await self.callback(UNDERLYING_INDEX, feed=self.id,
+                            symbol=symbol,
+                            timestamp=ts,
+                            receipt_timestamp=timestamp,
+                            price=msg['i'])
+
+    async def _index_price(self, msg: dict, timestamp: float):
+        """
+        {
+            "e": "indexPriceUpdate",  // Event type
+            "E": 1591261236000,       // Event time
+            "i": "BTCUSD",            // Pair
+            "p": "9636.57860000",     // Index Price
+        }
+        """
+        pair = self.exchange_symbol_to_std_symbol(msg['i'])
+        price = Decimal(msg['p'])
+
+        # Binance does not have a timestamp in this update, but the two futures APIs do
+        if 'E' in msg:
+            ts = timestamp_normalize(self.id, msg['E'])
+        else:
+            ts = timestamp
+        await self.callback(UNDERLYING_INDEX, feed=self.id,
+                            symbol=pair,
+                            timestamp=ts,
+                            receipt_timestamp=timestamp,
+                            price=msg['p'])        
+    
     async def _candle(self, msg: dict, timestamp: float):
         """
         {
@@ -374,6 +435,8 @@ class Binance(Feed):
                 await self._liquidations(msg, timestamp)
             elif msg['e'] == 'markPriceUpdate':
                 await self._funding(msg, timestamp)
+            elif msg['e'] == 'indexPriceUpdate':
+                await self._index_price(msg, timestamp)
             elif msg['e'] == 'kline':
                 await self._candle(msg, timestamp)
             else:

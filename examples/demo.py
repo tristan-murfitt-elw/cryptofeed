@@ -7,8 +7,8 @@ associated with this software.
 from decimal import Decimal
 
 from cryptofeed import FeedHandler
-from cryptofeed.callback import BookCallback, FundingCallback, TickerCallback, TradeCallback, FuturesIndexCallback, OpenInterestCallback
-from cryptofeed.defines import CANDLES, BID, ASK, BLOCKCHAIN, COINBASE, FUNDING, GEMINI, L2_BOOK, L3_BOOK, OPEN_INTEREST, TICKER, TRADES, FUTURES_INDEX, BOOK_DELTA
+from cryptofeed.callback import BookCallback, FundingCallback, TickerCallback, TradeCallback, UnderlyingIndexCallback, OpenInterestCallback
+from cryptofeed.defines import CANDLES, BID, ASK, BLOCKCHAIN, COINBASE, FUNDING, GEMINI, L2_BOOK, L3_BOOK, OPEN_INTEREST, TICKER, TRADES, UNDERLYING_INDEX, BOOK_DELTA
 from cryptofeed.exchanges import (FTX, Binance, BinanceUS, BinanceFutures, Bitfinex, Bitflyer, Bitmax, Bitmex, Bitstamp, Bittrex, Coinbase, Gateio,
                                   HitBTC, Huobi, HuobiDM, HuobiSwap, Kraken, OKCoin, OKEx, Poloniex, Bybit, KuCoin)
 
@@ -51,8 +51,8 @@ async def volume(**kwargs):
     print(f"Volume: {kwargs}")
 
 
-async def futures_index(**kwargs):
-    print(f"FuturesIndex: {kwargs}")
+async def underlying_index(**kwargs):
+    print(f"UnderlyingIndex: {kwargs}")
 
 
 async def candle_callback(feed, symbol, start, stop, interval, trades, open_price, close_price, high_price, low_price, volume, closed, timestamp, receipt_timestamp):
@@ -101,7 +101,7 @@ def main():
     f.add_feed(OKEx(symbols=['BTC-USDT'], channels=[TRADES], callbacks={TRADES: TradeCallback(trade)}))
     f.add_feed(Bittrex(subscription={L2_BOOK: ['BTC-USDT', 'ETH-USDT'], CANDLES: ['BTC-USDT', 'ETH-USDT'], TRADES: ['BTC-USDT', 'ETH-USDT'], TICKER: ['BTC-USDT', 'ETH-USDT']}, callbacks={CANDLES: candle_callback, L2_BOOK: BookCallback(book), TICKER: TickerCallback(ticker), TRADES: TradeCallback(trade)}))
     f.add_feed(FTX(symbols=['ADA-PERP', 'ALGO-PERP', 'ALT-PERP', 'ATOM-PERP', 'BCH-PERP', 'BNB-PERP', 'BSV-PERP', 'BTC-PERP', 'BTMX-PERP', 'DOGE-PERP', 'DRGN-PERP', 'EOS-PERP', 'ETC-PERP'], channels=[TICKER], callbacks={TICKER: ticker, TRADES: TradeCallback(trade)}))
-    f.add_feed(Bybit(symbols=['BTC-USDT', 'BTC-USD'], channels=[FUTURES_INDEX], callbacks={OPEN_INTEREST: OpenInterestCallback(oi), FUTURES_INDEX: FuturesIndexCallback(futures_index)}))
+    f.add_feed(Bybit(symbols=['BTC-USDT', 'BTC-USD'], channels=[UNDERLYING_INDEX], callbacks={OPEN_INTEREST: OpenInterestCallback(oi), UNDERLYING_INDEX: UnderlyingIndexCallback(underlying_index)}))
     f.add_feed(Bybit(symbols=['BTC-USDT', 'BTC-USD'], channels=[L2_BOOK, TRADES], callbacks={TRADES: trade, L2_BOOK: book}))
     f.add_feed(BLOCKCHAIN, symbols=['BTC-USD', 'ETH-USD'], channels=[L2_BOOK, TRADES], callbacks={L2_BOOK: BookCallback(book), TRADES: trade})
     f.add_feed(Bitmax(symbols=['XRP-USDT', 'BTC-USDT'], channels=[L2_BOOK], callbacks={TRADES: trade, L2_BOOK: book}))

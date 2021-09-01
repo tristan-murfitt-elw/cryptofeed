@@ -27,7 +27,7 @@ class OKEx(OKCoin):
     """
     id = OKEX
     api = 'https://www.okex.com/api/'
-    symbol_endpoint = ['https://www.okex.com/api/spot/v3/instruments', 'https://www.okex.com/api/swap/v3/instruments', 'https://www.okex.com/api/futures/v3/instruments', 'https://www.okex.com/api/option/v3/instruments/BTC-USD', 'https://www.okex.com/api/option/v3/instruments/ETH-USD', 'https://www.okex.com/api/option/v3/instruments/EOS-USD']
+    symbol_endpoint = ['https://www.okex.com/api/spot/v3/instruments', 'https://www.okex.com/api/swap/v3/instruments', 'https://www.okex.com/api/futures/v3/instruments', 'https://www.okex.com/api/option/v3/instruments/BTC-USD', 'https://www.okex.com/api/option/v3/instruments/ETH-USD', 'https://www.okex.com/api/option/v3/instruments/EOS-USD', 'https://www.okex.com/api/option/v3/underlying']
 
     @classmethod
     def _parse_symbol_data(cls, data: list, symbol_separator: str) -> Tuple[Dict, Dict]:
@@ -36,8 +36,14 @@ class OKEx(OKCoin):
 
         for entry in data:
             for e in entry:
-                ret[e['instrument_id'].replace("-", symbol_separator)] = e['instrument_id']
-                info['tick_size'][e['instrument_id']] = e['tick_size']
+                if isinstance(e, str):
+                    # Index
+                    standard_symbol = f'.{e.replace("-", symbol_separator)}'
+                    ret[standard_symbol] = e
+                else:
+                    standard_symbol = e['instrument_id'].replace("-", symbol_separator)
+                    ret[standard_symbol] = e['instrument_id']
+                    info['tick_size'][standard_symbol] = e['tick_size']
 
         for symbol in ret:
             instrument_type = 'futures'
@@ -48,6 +54,8 @@ class OKEx(OKCoin):
                 instrument_type = 'option'
             if symbol[-4:] == "SWAP":  # BTC-USDT-SWAP
                 instrument_type = 'swap'
+            if symbol[0] == '.':
+                instrument_type = 'index'
             info['instrument_type'][symbol] = instrument_type
 
         return ret, info

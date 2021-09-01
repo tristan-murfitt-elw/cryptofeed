@@ -12,8 +12,8 @@ from yapic import json
 
 from cryptofeed.backends.backend import (BackendBookCallback, BackendBookDeltaCallback, BackendCandlesCallback, BackendFundingCallback,
                                          BackendOpenInterestCallback, BackendQueue, BackendTickerCallback, BackendTradeCallback,
-                                         BackendLiquidationsCallback, BackendFuturesIndexCallback, BackendMarketInfoCallback)
-from cryptofeed.defines import CANDLES, FUNDING, OPEN_INTEREST, TICKER, TRADES, LIQUIDATIONS, FUTURES_INDEX, MARKET_INFO
+                                         BackendLiquidationsCallback, BackendUnderlyingIndexCallback, BackendMarketInfoCallback)
+from cryptofeed.defines import CANDLES, FUNDING, OPEN_INTEREST, TICKER, TRADES, LIQUIDATIONS, UNDERLYING_INDEX, MARKET_INFO
 
 
 class PostgresCallback(BackendQueue):
@@ -132,11 +132,11 @@ class OpenInterestPostgres(PostgresCallback, BackendOpenInterestCallback):
         await super().write(feed, pair, timestamp, receipt_timestamp, d)
 
 
-class FuturesIndexPostgres(PostgresCallback, BackendFuturesIndexCallback):
-    default_table = FUTURES_INDEX
+class UnderlyingIndexPostgres(PostgresCallback, BackendUnderlyingIndexCallback):
+    default_table = UNDERLYING_INDEX
 
     async def write(self, feed: str, pair: str, timestamp: float, receipt_timestamp: float, data: dict):
-        d = f"{data['futures_index']}"
+        d = f"{data['underlying_index']}"
         await super().write(feed, pair, timestamp, receipt_timestamp, d)
 
 

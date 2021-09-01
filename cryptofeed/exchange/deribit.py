@@ -7,10 +7,10 @@ from sortedcontainers import SortedDict as sd
 from yapic import json
 
 from cryptofeed.connection import AsyncConnection
-from cryptofeed.defines import BID, ASK, BUY, DERIBIT, FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, SELL, TICKER, TRADES, FILLED
+from cryptofeed.defines import BID, ASK, BUY, DERIBIT, FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, UNDERLYING_INDEX, SELL, TICKER, TRADES, FILLED
 from cryptofeed.feed import Feed
 from cryptofeed.exceptions import MissingSequenceNumber
-from cryptofeed.standards import timestamp_normalize
+from cryptofeed.standards import feed_to_exchange, timestamp_normalize
 
 
 LOG = logging.getLogger('feedhandler')
@@ -18,7 +18,7 @@ LOG = logging.getLogger('feedhandler')
 
 class Deribit(Feed):
     id = DERIBIT
-    symbol_endpoint = ['https://www.deribit.com/api/v2/public/get_instruments?currency=BTC&expired=false', 'https://www.deribit.com/api/v2/public/get_instruments?currency=ETH&expired=false']
+    symbol_endpoint = ['https://www.deribit.com/api/v2/public/get_instruments?currency=BTC&expired=false', 'https://www.deribit.com/api/v2/public/get_instruments?currency=ETH&expired=false', 'https://www.deribit.com/api/v2/public/get_index_price_names']
 
     @classmethod
     def _parse_symbol_data(cls, data: list, symbol_separator: str) -> Tuple[Dict, Dict]:
@@ -27,10 +27,16 @@ class Deribit(Feed):
 
         for entry in data:
             for e in entry['result']:
-                split = e['instrument_name'].split("-")
-                normalized = split[0] + symbol_separator + e['quote_currency'] + "-" + '-'.join(split[1:])
-                ret[normalized] = e['instrument_name']
-                info['tick_size'][normalized] = e['tick_size']
+                if isinstance(e, str):
+                    # Index symbols
+                    split = e.split("_")    # Format: e = "btc_usd", transform to ".BTC-USD"
+                    normalized = f'.{split[0].upper()}-{split[1].upper()}'
+                    ret[normalized] = e
+                else:
+                    split = e['instrument_name'].split("-")
+                    normalized = split[0] + symbol_separator + e['quote_currency'] + "-" + '-'.join(split[1:])
+                    ret[normalized] = e['instrument_name']
+                    info['tick_size'][normalized] = e['tick_size']
         return ret, info
 
     def __init__(self, **kwargs):
@@ -133,6 +139,7 @@ class Deribit(Feed):
             'last': Decimal(m.get('last_price') or 0),   # nullable
             'mark_price': Decimal(m.get('mark_price', 0)),
             'underlying_price': Decimal(m.get('underlying_price', 0)),
+            'index_price': Decimal(m.get('index_price') or 0),   # nullable
             'volume': Decimal(m['stats'].get('volume') or 0),    # nullable
             'best_bid_size': Decimal(m.get('best_bid_amount', 0)),
             'best_ask_size': Decimal(m.get('best_ask_amount', 0)),
@@ -174,7 +181,10 @@ class Deribit(Feed):
         channels = []
         for chan in self.subscription:
             for pair in self.subscription[chan]:
-                channels.append(f"{chan}.{pair}.raw")
+                if chan == feed_to_exchange(self.id, UNDERLYING_INDEX):
+                    channels.append(f"{chan}.{pair}")
+                else:
+                    channels.append(f"{chan}.{pair}.raw")
         await conn.write(json.dumps(
             {
                 "jsonrpc": "2.0",
@@ -253,6 +263,30 @@ class Deribit(Feed):
                 delta[ASK].append((Decimal(price), Decimal(amount)))
         await self.book_callback(self.l2_book[pair], L2_BOOK, pair, False, delta, timestamp_normalize(self.id, ts), timestamp)
 
+    async def _index_price(self, msg: dict, timestamp: float):
+        '''
+        {
+            "jsonrpc": "2.0",
+            "method": "subscription",
+            "params": {
+                "channel": "deribit_price_index.btc_usd",
+                "data": {
+                    "timestamp": 1629972416405,
+                    "price": 46908.9,
+                    "index_name": "btc_usd"
+                }
+            }
+        }
+        '''
+        pair = self.exchange_symbol_to_std_symbol(msg['params']['data']['index_name'])
+        ts = timestamp_normalize(self.id, msg['params']['data']['timestamp'])
+        index_price = Decimal(msg['params']['data'].get('price'))
+        await self.callback(UNDERLYING_INDEX, feed=self.id,
+                            symbol=pair,
+                            timestamp=ts,
+                            receipt_timestamp=timestamp,
+                            price=index_price)
+    
     async def message_handler(self, msg: str, conn, timestamp: float):
 
         msg_dict = json.loads(msg, parse_float=Decimal)
@@ -272,5 +306,7 @@ class Deribit(Feed):
                 await self._book_snapshot(msg_dict, timestamp)
             elif "prev_change_id" in msg_dict["params"]["data"].keys():
                 await self._book_update(msg_dict, timestamp)
+        elif "deribit_price_index" == msg_dict["params"]["channel"].split(".")[0]:
+            await self._index_price(msg_dict, timestamp)
         else:
             LOG.warning("%s: Invalid message type %s", self.id, msg)

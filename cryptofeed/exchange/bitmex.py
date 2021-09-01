@@ -18,7 +18,7 @@ from decimal import Decimal
 from sortedcontainers import SortedDict as sd
 from yapic import json
 
-from cryptofeed.defines import BID, ASK, BITMEX, BUY, FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, SELL, TICKER, TRADES, UNFILLED
+from cryptofeed.defines import BID, ASK, BITMEX, BUY, FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, SELL, TICKER, TRADES, UNDERLYING_INDEX, UNFILLED
 from cryptofeed.feed import Feed
 from cryptofeed.standards import timestamp_normalize
 
@@ -29,7 +29,7 @@ LOG = logging.getLogger('feedhandler')
 class Bitmex(Feed):
     id = BITMEX
     api = 'https://www.bitmex.com/api/v1/'
-    symbol_endpoint = "https://www.bitmex.com/api/v1/instrument/active"
+    symbol_endpoint = "https://www.bitmex.com/api/v1/instrument/activeAndIndices"
 
     @classmethod
     def _parse_symbol_data(cls, data: dict, symbol_separator: str) -> Tuple[Dict, Dict]:
@@ -37,15 +37,22 @@ class Bitmex(Feed):
         info = defaultdict(dict)
 
         for entry in data:
-            components = []
-            components.append(entry['rootSymbol'])
-            components.append(entry['quoteCurrency'])
+            if entry["symbol"][0] == '.':
+                # Index, just use the symbol
+                normalized = entry['symbol']
+                normalized = normalized.replace("XBT", "BTC")
+                info['index'][normalized] = True
+            else:
+                components = []
+                components.append(entry['rootSymbol'])
+                components.append(entry['quoteCurrency'])
 
-            if entry['expiry']:
-                components.append(entry['symbol'][-3:])
+                if entry['expiry']:
+                    components.append(entry['symbol'][-3:])
 
-            normalized = symbol_separator.join(components)
-            normalized = normalized.replace("XBT", "BTC")
+                normalized = symbol_separator.join(components)
+                normalized = normalized.replace("XBT", "BTC")
+            
             ret[normalized] = entry['symbol']
             info['tick_size'][normalized] = entry['tickSize']
 
@@ -53,6 +60,10 @@ class Bitmex(Feed):
                 info['expiry'][normalized] = entry['expiry']
 
         return ret, info
+
+    @classmethod
+    def is_index(cls, symbol: str):
+        return cls.info()['index'].get(symbol, False)
 
     def __init__(self, sandbox=False, **kwargs):
         auth_api = 'wss://www.bitmex.com/realtime' if not sandbox else 'wss://testnet.bitmex.com/realtime'
@@ -85,14 +96,22 @@ class Bitmex(Feed):
         """
         for data in msg['data']:
             ts = timestamp_normalize(self.id, data['timestamp'])
-            await self.callback(TRADES, feed=self.id,
-                                symbol=self.exchange_symbol_to_std_symbol(data['symbol']),
-                                side=BUY if data['side'] == 'Buy' else SELL,
-                                amount=Decimal(data['size']),
-                                price=Decimal(data['price']),
-                                order_id=data['trdMatchID'],
-                                timestamp=ts,
-                                receipt_timestamp=timestamp)
+            symbol = self.exchange_symbol_to_std_symbol(data['symbol'])
+            if self.is_index(symbol):
+                await self.callback(UNDERLYING_INDEX, feed=self.id,
+                                    symbol=symbol,
+                                    timestamp=ts,
+                                    receipt_timestamp=timestamp,
+                                    price=Decimal(data['price']))
+            else:
+                await self.callback(TRADES, feed=self.id,
+                                    symbol=symbol,
+                                    side=BUY if data['side'] == 'Buy' else SELL,
+                                    amount=Decimal(data['size']),
+                                    price=Decimal(data['price']),
+                                    order_id=data['trdMatchID'],
+                                    timestamp=ts,
+                                    receipt_timestamp=timestamp)
 
     async def _book(self, msg: dict, timestamp: float):
         """
