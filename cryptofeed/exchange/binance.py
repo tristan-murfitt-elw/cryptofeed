@@ -15,7 +15,7 @@ from yapic import json
 from cryptofeed.connection import AsyncConnection, HTTPPoll
 from cryptofeed.defines import BID, ASK, BINANCE, BUY, CANDLES, FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, UNDERLYING_INDEX, SELL, TICKER, TRADES, FILLED, UNFILLED
 from cryptofeed.feed import Feed
-from cryptofeed.standards import timestamp_normalize, normalize_channel
+from cryptofeed.standards import feed_to_exchange, timestamp_normalize, normalize_channel
 
 
 LOG = logging.getLogger('feedhandler')
@@ -43,7 +43,7 @@ class Binance(Feed):
 
             # Add subscribeable symbol for an index
             index = '.' + symbol['pair'][:split] + symbol_separator + symbol['pair'][split:]
-            ret[index] = symbol['pair']
+            ret[index] = '.' + symbol['pair']
 
             info['tick_size'][normalized] = symbol['filters'][0]['tickSize']
             if "contractType" in symbol:
@@ -90,6 +90,11 @@ class Binance(Feed):
                     if normalized_chan != CANDLES:
                         raise ValueError("Premium Index Symbols only allowed on Candle data feed")
                 else:
+                    if pair.startswith("."):
+                        # Remove dot from index symbols, and only sub for UNDERLYING_INDEX
+                        if chan != feed_to_exchange(self.id, UNDERLYING_INDEX):
+                            continue
+                        pair = pair[1:]
                     pair = pair.lower()
                 subs.append(f"{pair}@{stream}")
 
@@ -331,6 +336,7 @@ class Binance(Feed):
         }
         """
         symbol = self.exchange_symbol_to_std_symbol(msg['s'])
+        index_symbol = self.exchange_symbol_to_std_symbol('.' + msg['s'])
         ts = timestamp_normalize(self.id, msg['E'])
 
         await self.callback(FUNDING,
@@ -344,7 +350,7 @@ class Binance(Feed):
                             )
 
         await self.callback(UNDERLYING_INDEX, feed=self.id,
-                            symbol=symbol,
+                            symbol=index_symbol,
                             timestamp=ts,
                             receipt_timestamp=timestamp,
                             price=msg['i'])
@@ -358,7 +364,7 @@ class Binance(Feed):
             "p": "9636.57860000",     // Index Price
         }
         """
-        pair = self.exchange_symbol_to_std_symbol(msg['i'])
+        pair = self.exchange_symbol_to_std_symbol('.' + msg['i'])
         price = Decimal(msg['p'])
 
         # Binance does not have a timestamp in this update, but the two futures APIs do
@@ -370,7 +376,7 @@ class Binance(Feed):
                             symbol=pair,
                             timestamp=ts,
                             receipt_timestamp=timestamp,
-                            price=msg['p'])        
+                            price=price)        
     
     async def _candle(self, msg: dict, timestamp: float):
         """

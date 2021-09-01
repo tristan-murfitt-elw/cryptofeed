@@ -370,7 +370,7 @@ class FTX(Feed):
                 future = data['result']
 
                 if future == last_update.get(future['name']):
-                        continue
+                    continue
                 await self.callback(UNDERLYING_INDEX,
                                             feed=self.id,
                                             symbol=self.exchange_symbol_to_std_symbol(index_name),
