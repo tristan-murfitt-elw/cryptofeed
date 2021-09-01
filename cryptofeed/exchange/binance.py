@@ -5,6 +5,7 @@ Please see the LICENSE file for the terms and conditions
 associated with this software.
 '''
 import logging
+import time
 from collections import defaultdict
 from decimal import Decimal
 from typing import Dict, Union, Tuple
@@ -48,7 +49,6 @@ class Binance(Feed):
             info['tick_size'][normalized] = symbol['filters'][0]['tickSize']
             if "contractType" in symbol:
                 info['contract_type'][normalized] = symbol['contractType']
-        print(ret)
         return ret, info
 
     def __init__(self, candle_interval='1m', candle_closed_only=False, **kwargs):
@@ -339,17 +339,19 @@ class Binance(Feed):
         index_symbol = self.exchange_symbol_to_std_symbol('.' + msg['s'])
         ts = timestamp_normalize(self.id, msg['E'])
 
-        await self.callback(FUNDING,
-                            feed=self.id,
-                            symbol=symbol,
-                            timestamp=ts,
-                            receipt_timestamp=timestamp,
-                            mark_price=msg['p'],
-                            rate=msg['r'],
-                            next_funding_time=timestamp_normalize(self.id, msg['T']),
-                            )
+        if msg['s'] in self.subscription[feed_to_exchange(self.id, FUNDING)]:
+            await self.callback(FUNDING,
+                                feed=self.id,
+                                symbol=symbol,
+                                timestamp=ts,
+                                receipt_timestamp=timestamp,
+                                mark_price=msg['p'],
+                                rate=msg['r'],
+                                next_funding_time=timestamp_normalize(self.id, msg['T']),
+                                )
 
-        await self.callback(UNDERLYING_INDEX, feed=self.id,
+        if ('.' + msg['s']) in self.subscription[feed_to_exchange(self.id, UNDERLYING_INDEX)]:
+            await self.callback(UNDERLYING_INDEX, feed=self.id,
                             symbol=index_symbol,
                             timestamp=ts,
                             receipt_timestamp=timestamp,
