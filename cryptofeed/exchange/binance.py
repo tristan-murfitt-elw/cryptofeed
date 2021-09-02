@@ -14,7 +14,7 @@ from sortedcontainers import SortedDict as sd
 from yapic import json
 
 from cryptofeed.connection import AsyncConnection, HTTPPoll
-from cryptofeed.defines import BID, ASK, BINANCE, BUY, CANDLES, FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, UNDERLYING_INDEX, SELL, TICKER, TRADES, FILLED, UNFILLED
+from cryptofeed.defines import BID, ASK, BINANCE, BUY, CANDLES, FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, UNDERLYING_INDEX, SELL, TICKER, TRADES, FILLED, UNFILLED, INDEX_PREFIX
 from cryptofeed.feed import Feed
 from cryptofeed.standards import feed_to_exchange, timestamp_normalize, normalize_channel
 
@@ -43,8 +43,8 @@ class Binance(Feed):
             ret[normalized] = symbol['symbol']
 
             # Add subscribeable symbol for an index
-            index = '.' + symbol['pair'][:split] + symbol_separator + symbol['pair'][split:]
-            ret[index] = '.' + symbol['pair']
+            index = INDEX_PREFIX + symbol['pair'][:split] + symbol_separator + symbol['pair'][split:]
+            ret[index] = INDEX_PREFIX + symbol['pair']
 
             info['tick_size'][normalized] = symbol['filters'][0]['tickSize']
             if "contractType" in symbol:
@@ -90,11 +90,11 @@ class Binance(Feed):
                     if normalized_chan != CANDLES:
                         raise ValueError("Premium Index Symbols only allowed on Candle data feed")
                 else:
-                    if pair.startswith("."):
-                        # Remove dot from index symbols, and only sub for UNDERLYING_INDEX
+                    if pair.startswith(INDEX_PREFIX):
+                        # Remove index prefix from index symbols, and only sub for UNDERLYING_INDEX
                         if chan != feed_to_exchange(self.id, UNDERLYING_INDEX):
                             continue
-                        pair = pair[1:]
+                        pair = pair[len(INDEX_PREFIX):]
                     pair = pair.lower()
                 subs.append(f"{pair}@{stream}")
 
@@ -336,7 +336,7 @@ class Binance(Feed):
         }
         """
         symbol = self.exchange_symbol_to_std_symbol(msg['s'])
-        index_symbol = self.exchange_symbol_to_std_symbol('.' + msg['s'])
+        index_symbol = self.exchange_symbol_to_std_symbol(INDEX_PREFIX + msg['s'])
         ts = timestamp_normalize(self.id, msg['E'])
 
         if msg['s'] in self.subscription[feed_to_exchange(self.id, FUNDING)]:
@@ -350,7 +350,7 @@ class Binance(Feed):
                                 next_funding_time=timestamp_normalize(self.id, msg['T']),
                                 )
 
-        if ('.' + msg['s']) in self.subscription[feed_to_exchange(self.id, UNDERLYING_INDEX)]:
+        if (INDEX_PREFIX + msg['s']) in self.subscription[feed_to_exchange(self.id, UNDERLYING_INDEX)]:
             await self.callback(UNDERLYING_INDEX, feed=self.id,
                             symbol=index_symbol,
                             timestamp=ts,
@@ -366,7 +366,7 @@ class Binance(Feed):
             "p": "9636.57860000",     // Index Price
         }
         """
-        pair = self.exchange_symbol_to_std_symbol('.' + msg['i'])
+        pair = self.exchange_symbol_to_std_symbol(INDEX_PREFIX + msg['i'])
         price = Decimal(msg['p'])
 
         # Binance does not have a timestamp in this update, but the two futures APIs do

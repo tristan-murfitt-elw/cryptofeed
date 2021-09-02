@@ -15,7 +15,7 @@ from sortedcontainers import SortedDict as sd
 from yapic import json
 
 from cryptofeed.connection import AsyncConnection
-from cryptofeed.defines import BID, ASK, BUY, FUNDING, KRAKEN_FUTURES, L2_BOOK, OPEN_INTEREST, UNDERLYING_INDEX, SELL, TICKER, TRADES
+from cryptofeed.defines import BID, ASK, BUY, FUNDING, KRAKEN_FUTURES, L2_BOOK, OPEN_INTEREST, UNDERLYING_INDEX, SELL, TICKER, TRADES, INDEX_PREFIX
 from cryptofeed.exceptions import MissingSequenceNumber
 from cryptofeed.feed import Feed
 from cryptofeed.standards import feed_to_exchange, timestamp_normalize
@@ -58,8 +58,8 @@ class KrakenFutures(Feed):
                 info['product_type'][normalized] = _kraken_futures_product_type[normalized[:2]]
             else:
                 if entry['symbol'][:2] == cls.index_product_prefix: # Index
-                    normalized = f'.{normalized}'
-                    info['product_type'][normalized] = _kraken_futures_product_type[normalized[1:3]]
+                    normalized = f'{INDEX_PREFIX}{normalized}'
+                    info['product_type'][normalized] = _kraken_futures_product_type[entry['symbol'][:2].upper()]
                 else:
                     continue
             ret[normalized] = entry['symbol']

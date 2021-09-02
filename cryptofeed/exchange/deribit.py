@@ -7,7 +7,7 @@ from sortedcontainers import SortedDict as sd
 from yapic import json
 
 from cryptofeed.connection import AsyncConnection
-from cryptofeed.defines import BID, ASK, BUY, DERIBIT, FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, UNDERLYING_INDEX, SELL, TICKER, TRADES, FILLED
+from cryptofeed.defines import BID, ASK, BUY, DERIBIT, FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, UNDERLYING_INDEX, SELL, TICKER, TRADES, FILLED, INDEX_PREFIX
 from cryptofeed.feed import Feed
 from cryptofeed.exceptions import MissingSequenceNumber
 from cryptofeed.standards import feed_to_exchange, timestamp_normalize
@@ -30,7 +30,7 @@ class Deribit(Feed):
                 if isinstance(e, str):
                     # Index symbols
                     split = e.split("_")    # Format: e = "btc_usd", transform to ".BTC-USD"
-                    normalized = f'.{split[0].upper()}-{split[1].upper()}'
+                    normalized = f'{INDEX_PREFIX}{split[0].upper()}-{split[1].upper()}'
                     ret[normalized] = e
                 else:
                     split = e['instrument_name'].split("-")

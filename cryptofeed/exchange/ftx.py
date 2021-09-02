@@ -10,7 +10,6 @@ from collections import defaultdict
 import logging
 from decimal import Decimal
 import hmac
-from os import CLD_CONTINUED
 from time import time
 import zlib
 from typing import Dict, Iterable, Tuple
@@ -22,7 +21,7 @@ from yapic import json
 from cryptofeed.connection import AsyncConnection
 from cryptofeed.defines import BID, ASK, BUY, USER_FILLS
 from cryptofeed.defines import FTX as FTX_id
-from cryptofeed.defines import FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, UNDERLYING_INDEX, SELL, TICKER, TRADES, FILLED
+from cryptofeed.defines import FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, UNDERLYING_INDEX, SELL, TICKER, TRADES, FILLED, INDEX_PREFIX
 from cryptofeed.exceptions import BadChecksum
 from cryptofeed.feed import Feed
 from cryptofeed.standards import feed_to_exchange, is_authenticated_channel, normalize_channel, timestamp_normalize
@@ -49,7 +48,7 @@ class FTX(Feed):
             if symbol[-4:] == 'PERP':
                 # Add an index symbol
                 underlying = d['underlying']
-                index_normalized = f'.{underlying}{symbol_separator}USD'
+                index_normalized = f'{INDEX_PREFIX}{underlying}{symbol_separator}USD'
                 ret[index_normalized] = index_normalized
                 info['underlying_index'][index_normalized] = symbol
                 info['no_ws'][index_normalized] = True

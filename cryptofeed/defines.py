@@ -93,6 +93,8 @@ DELETE = 'DELETE'
 PUT = 'PUT'
 POST = 'POST'
 
+INDEX_PREFIX = 'INDEX_'
+
 
 """
 L2 Orderbook Layout
