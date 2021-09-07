@@ -43,8 +43,8 @@ class Binance(Feed):
             ret[normalized] = symbol['symbol']
 
             # Add subscribeable symbol for an index
-            index = INDEX_PREFIX + symbol['pair'][:split] + symbol_separator + symbol['pair'][split:]
-            ret[index] = INDEX_PREFIX + symbol['pair']
+            index = INDEX_PREFIX + symbol['pair']
+            ret[index] = index
 
             info['tick_size'][normalized] = symbol['filters'][0]['tickSize']
             if "contractType" in symbol:

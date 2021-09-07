@@ -58,8 +58,8 @@ class KrakenFutures(Feed):
                 info['product_type'][normalized] = _kraken_futures_product_type[normalized[:2]]
             else:
                 if entry['symbol'][:2] == cls.index_product_prefix: # Index
-                    normalized = f'{INDEX_PREFIX}{normalized}'
-                    info['product_type'][normalized] = _kraken_futures_product_type[entry['symbol'][:2].upper()]
+                    normalized = entry['symbol']
+                    info['product_type'][normalized] = _kraken_futures_product_type[normalized[:2].upper()]
                 else:
                     continue
             ret[normalized] = entry['symbol']

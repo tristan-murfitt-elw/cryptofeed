@@ -42,7 +42,6 @@ class Bitmex(Feed):
                 # Need to replace the dot on the index symbol
                 exchangeSymbol = f'{INDEX_PREFIX}{exchangeSymbol[1:]}'
                 normalized = exchangeSymbol
-                normalized = normalized.replace("XBT", "BTC")
                 info['index'][normalized] = True
             else:
                 components = []

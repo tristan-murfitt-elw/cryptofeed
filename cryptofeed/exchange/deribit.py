@@ -27,11 +27,9 @@ class Deribit(Feed):
 
         for entry in data:
             for e in entry['result']:
-                if isinstance(e, str):
+                if isinstance(e, str): # Format: e = "btc_usd"
                     # Index symbols
-                    split = e.split("_")    # Format: e = "btc_usd", transform to ".BTC-USD"
-                    normalized = f'{INDEX_PREFIX}{split[0].upper()}-{split[1].upper()}'
-                    ret[normalized] = e
+                    ret[e] = e
                 else:
                     split = e['instrument_name'].split("-")
                     normalized = split[0] + symbol_separator + e['quote_currency'] + "-" + '-'.join(split[1:])

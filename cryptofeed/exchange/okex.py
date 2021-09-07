@@ -14,7 +14,7 @@ from typing import Dict, Tuple
 from yapic import json
 
 from cryptofeed.connection import AsyncConnection
-from cryptofeed.defines import OKEX, LIQUIDATIONS, BUY, SELL, FILLED, UNFILLED
+from cryptofeed.defines import OKEX, LIQUIDATIONS, BUY, SELL, FILLED, UNFILLED, INDEX_PREFIX
 from cryptofeed.exchange.okcoin import OKCoin
 
 
@@ -38,7 +38,7 @@ class OKEx(OKCoin):
             for e in entry:
                 if isinstance(e, str):
                     # Index
-                    standard_symbol = f'.{e.replace("-", symbol_separator)}'
+                    standard_symbol = f'{INDEX_PREFIX}{e.replace("-", symbol_separator)}'
                     ret[standard_symbol] = e
                 else:
                     standard_symbol = e['instrument_id'].replace("-", symbol_separator)
@@ -54,7 +54,7 @@ class OKEx(OKCoin):
                 instrument_type = 'option'
             if symbol[-4:] == "SWAP":  # BTC-USDT-SWAP
                 instrument_type = 'swap'
-            if symbol[0] == '.':
+            if INDEX_PREFIX in symbol:
                 instrument_type = 'index'
             info['instrument_type'][symbol] = instrument_type
 
