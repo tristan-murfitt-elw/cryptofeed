@@ -48,8 +48,8 @@ class BinanceFutures(Binance):
     @classmethod
     def _is_index_symbols_result(cls, symbols_result) -> bool:
         """
-        Returns true if the entry is an index symbol. In the Deribit API,
-        index data is returned as an array of strings, while regular symbols are an array of dictionaries
+        Returns true if the entry is contains index results. In the Binance API, index data is returned as an array of dictionaries,
+        while regular symbols are returned as part of a dictionary of general market information.
         """
         return isinstance(symbols_result, list)
 
