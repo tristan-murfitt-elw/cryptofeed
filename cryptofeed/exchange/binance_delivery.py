@@ -6,12 +6,13 @@ associated with this software.
 '''
 from decimal import Decimal
 import logging
-from typing import Tuple
+from typing import Tuple, Dict, List
 
 from yapic import json
 
-from cryptofeed.defines import BINANCE_DELIVERY
+from cryptofeed.defines import BINANCE_DELIVERY, UNDERLYING_INDEX
 from cryptofeed.exchange.binance import Binance
+from cryptofeed.standards import timestamp_normalize
 
 LOG = logging.getLogger('feedhandler')
 
@@ -19,7 +20,7 @@ LOG = logging.getLogger('feedhandler')
 class BinanceDelivery(Binance):
     valid_depths = [5, 10, 20, 50, 100, 500, 1000]
     id = BINANCE_DELIVERY
-    symbol_endpoint = 'https://dapi.binance.com/dapi/v1/exchangeInfo'
+    symbol_endpoint = ['https://dapi.binance.com/dapi/v1/exchangeInfo', 'https://dapi.binance.com/dapi/v1/premiumIndex']
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -27,6 +28,29 @@ class BinanceDelivery(Binance):
         self.ws_endpoint = 'wss://dstream.binance.com'
         self.rest_endpoint = 'https://dapi.binance.com/dapi/v1'
         self.address = self._address()
+
+    @classmethod
+    def _parse_symbol_data(cls, data: List, symbol_separator: str) -> Tuple[Dict, Dict]:
+        ret = {}
+        for symbols_result in data:
+            if cls._is_index_symbols_result(symbols_result):
+                for index in symbols_result:
+                    # Index symbol
+                    exchange_symbol = cls._translate_index_symbol(index['pair'], False)
+                    ret[exchange_symbol] = exchange_symbol
+            else:
+                # Regular symbols
+                base, info = super()._parse_symbol_data(symbols_result, symbol_separator)
+                ret.update(base)
+        return ret, info
+
+    @classmethod
+    def _is_index_symbols_result(cls, symbols_result) -> bool:
+        """
+        Returns true if the entry is an index symbol. In the Deribit API,
+        index data is returned as an array of strings, while regular symbols are an array of dictionaries
+        """
+        return isinstance(symbols_result, list)
 
     def _check_update_id(self, pair: str, msg: dict) -> Tuple[bool, bool]:
         skip_update = False
@@ -44,6 +68,31 @@ class BinanceDelivery(Binance):
             LOG.warning("%s: Missing book update detected, resetting book", self.id)
             skip_update = True
         return skip_update, forced
+
+    async def _index_price(self, msg: dict, timestamp: float):
+        """
+        {
+            "e": "indexPriceUpdate",  // Event type
+            "E": 1591261236000,       // Event time
+            "i": "BTCUSD",            // Pair
+            "p": "9636.57860000",     // Index Price
+        }
+        """
+        exchange_index_symbol = self._translate_index_symbol(msg['i'], False)
+        pair = self.exchange_symbol_to_std_symbol(exchange_index_symbol)
+        price = Decimal(msg['p'])
+
+        # Binance does not have a timestamp in this update, but the two futures APIs do
+        if 'E' in msg:
+            ts = timestamp_normalize(self.id, msg['E'])
+        else:
+            ts = timestamp
+        await self.callback(UNDERLYING_INDEX, feed=self.id,
+                            symbol=pair,
+                            timestamp=ts,
+                            receipt_timestamp=timestamp,
+                            price=price)        
+    
 
     async def message_handler(self, msg: str, conn, timestamp: float):
         msg = json.loads(msg, parse_float=Decimal)

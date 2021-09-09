@@ -42,10 +42,6 @@ class Binance(Feed):
             normalized = symbol['symbol'][:split] + symbol_separator + symbol['symbol'][split:]
             ret[normalized] = symbol['symbol']
 
-            # Add subscribeable symbol for an index
-            index = INDEX_PREFIX + symbol['pair']
-            ret[index] = index
-
             info['tick_size'][normalized] = symbol['filters'][0]['tickSize']
             if "contractType" in symbol:
                 info['contract_type'][normalized] = symbol['contractType']
@@ -61,7 +57,10 @@ class Binance(Feed):
             raise ValueError(f"Candle interval must be one of {self.valid_candle_intervals}")
         self.address = self._address()
         self._reset()
-
+        
+    def _subscribed_to_feed_and_symbol(self, feed: str, symbol: str) -> bool:
+        return symbol in self.subscription[feed_to_exchange(self.id, feed)]
+    
     def _address(self) -> Union[str, Dict]:
         """
         Binance has a 200 pair/stream limit per connection, so we need to break the address
@@ -94,7 +93,7 @@ class Binance(Feed):
                         # Remove index prefix from index symbols, and only sub for UNDERLYING_INDEX
                         if chan != feed_to_exchange(self.id, UNDERLYING_INDEX):
                             continue
-                        pair = pair[len(INDEX_PREFIX):]
+                        pair = self._translate_index_symbol(pair, True)
                     pair = pair.lower()
                 subs.append(f"{pair}@{stream}")
 
@@ -322,64 +321,6 @@ class Binance(Feed):
                             next_funding_time=timestamp_normalize(self.id, msg['T']),
                             )
     
-    async def _funding_with_index_price(self, msg: dict, timestamp: float):
-        """
-        {
-            "e": "markPriceUpdate",     // Event type
-            "E": 1562305380000,         // Event time
-            "s": "BTCUSDT",             // Symbol
-            "p": "11794.15000000",      // Mark price
-            "i": "11784.62659091",      // Index price
-            "P": "11784.25641265",      // Estimated Settle Price, only useful in the last hour before the settlement starts
-            "r": "0.00038167",          // Funding rate
-            "T": 1562306400000          // Next funding time
-        }
-        """
-        symbol = self.exchange_symbol_to_std_symbol(msg['s'])
-        index_symbol = self.exchange_symbol_to_std_symbol(INDEX_PREFIX + msg['s'])
-        ts = timestamp_normalize(self.id, msg['E'])
-
-        if msg['s'] in self.subscription[feed_to_exchange(self.id, FUNDING)]:
-            await self.callback(FUNDING,
-                                feed=self.id,
-                                symbol=symbol,
-                                timestamp=ts,
-                                receipt_timestamp=timestamp,
-                                mark_price=msg['p'],
-                                rate=msg['r'],
-                                next_funding_time=timestamp_normalize(self.id, msg['T']),
-                                )
-
-        if (INDEX_PREFIX + msg['s']) in self.subscription[feed_to_exchange(self.id, UNDERLYING_INDEX)]:
-            await self.callback(UNDERLYING_INDEX, feed=self.id,
-                            symbol=index_symbol,
-                            timestamp=ts,
-                            receipt_timestamp=timestamp,
-                            price=msg['i'])
-
-    async def _index_price(self, msg: dict, timestamp: float):
-        """
-        {
-            "e": "indexPriceUpdate",  // Event type
-            "E": 1591261236000,       // Event time
-            "i": "BTCUSD",            // Pair
-            "p": "9636.57860000",     // Index Price
-        }
-        """
-        pair = self.exchange_symbol_to_std_symbol(INDEX_PREFIX + msg['i'])
-        price = Decimal(msg['p'])
-
-        # Binance does not have a timestamp in this update, but the two futures APIs do
-        if 'E' in msg:
-            ts = timestamp_normalize(self.id, msg['E'])
-        else:
-            ts = timestamp
-        await self.callback(UNDERLYING_INDEX, feed=self.id,
-                            symbol=pair,
-                            timestamp=ts,
-                            receipt_timestamp=timestamp,
-                            price=price)        
-    
     async def _candle(self, msg: dict, timestamp: float):
         """
         {
@@ -443,8 +384,6 @@ class Binance(Feed):
                 await self._liquidations(msg, timestamp)
             elif msg['e'] == 'markPriceUpdate':
                 await self._funding(msg, timestamp)
-            elif msg['e'] == 'indexPriceUpdate':
-                await self._index_price(msg, timestamp)
             elif msg['e'] == 'kline':
                 await self._candle(msg, timestamp)
             else:

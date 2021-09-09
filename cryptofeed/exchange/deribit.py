@@ -27,9 +27,10 @@ class Deribit(Feed):
 
         for entry in data:
             for e in entry['result']:
-                if isinstance(e, str): # Format: e = "btc_usd"
+                if cls._entry_is_index_symbol(e): # Format: e = "btc_usd"
                     # Index symbols
-                    ret[e] = e
+                    symbol = cls._translate_index_symbol(e, False)
+                    ret[symbol] = symbol
                 else:
                     split = e['instrument_name'].split("-")
                     normalized = split[0] + symbol_separator + e['quote_currency'] + "-" + '-'.join(split[1:])
@@ -45,6 +46,14 @@ class Deribit(Feed):
         self.open_interest = {}
         self.l2_book = {}
         self.seq_no = {}
+
+    @classmethod
+    def _entry_is_index_symbol(cls, entry) -> bool:
+        """
+        Returns true if the entry is an index symbol. In the Deribit API,
+        index data is returned as an array of strings, while regular symbols are an array of dictionaries
+        """
+        return isinstance(entry, str)
 
     async def _trade(self, msg: dict, timestamp: float):
         """
@@ -180,7 +189,10 @@ class Deribit(Feed):
         for chan in self.subscription:
             for pair in self.subscription[chan]:
                 if chan == feed_to_exchange(self.id, UNDERLYING_INDEX):
-                    channels.append(f"{chan}.{pair}")
+                    if not pair.startswith(INDEX_PREFIX):
+                        continue # Skip subscribing to index feeds for non-index symbols
+                    channels.append(f"{chan}.{self._translate_index_symbol(pair, True)}")\
+                
                 else:
                     channels.append(f"{chan}.{pair}.raw")
         await conn.write(json.dumps(
@@ -276,9 +288,10 @@ class Deribit(Feed):
             }
         }
         '''
-        pair = self.exchange_symbol_to_std_symbol(msg['params']['data']['index_name'])
+        exchange_symbol = self._translate_index_symbol(msg['params']['data']['index_name'], False)
+        pair = self.exchange_symbol_to_std_symbol(exchange_symbol)
         ts = timestamp_normalize(self.id, msg['params']['data']['timestamp'])
-        index_price = Decimal(msg['params']['data'].get('price'))
+        index_price = Decimal(msg['params']['data'].get('price') or 0)
         await self.callback(UNDERLYING_INDEX, feed=self.id,
                             symbol=pair,
                             timestamp=ts,

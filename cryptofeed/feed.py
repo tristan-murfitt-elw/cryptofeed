@@ -17,7 +17,7 @@ from cryptofeed.config import Config
 from cryptofeed.connection import AsyncConnection, HTTPAsyncConn, HTTPSync, WSAsyncConn
 from cryptofeed.connection_handler import ConnectionHandler
 from cryptofeed.defines import (ASK, BID, BOOK_DELTA, CANDLES, FUNDING, UNDERLYING_INDEX, L2_BOOK, L3_BOOK, LIQUIDATIONS,
-                                OPEN_INTEREST, MARKET_INFO, ORDER_INFO, TICKER, TRADES, USER_FILLS)
+                                OPEN_INTEREST, MARKET_INFO, ORDER_INFO, TICKER, TRADES, USER_FILLS, INDEX_PREFIX)
 from cryptofeed.exceptions import BidAskOverlapping, UnsupportedDataFeed, UnsupportedSymbol
 from cryptofeed.standards import feed_to_exchange, is_authenticated_channel
 from cryptofeed.util.book import book_delta, depth
@@ -241,6 +241,14 @@ class Feed:
         except Exception as e:
             LOG.error("%s: Failed to parse symbol information: %s", cls.id, str(e), exc_info=True)
             raise
+
+    @classmethod
+    def _translate_index_symbol(cls, symbol: str, is_outbound: bool) -> str:
+        if is_outbound:
+            # Outbound (to exchange API), remove INDEX_PREFIX
+            return symbol[len(INDEX_PREFIX):]
+        else:
+            return f'{INDEX_PREFIX}{symbol}'
 
     async def book_callback(self, book: dict, book_type: str, symbol: str, forced: bool, delta: dict, timestamp: float, receipt_timestamp: float):
         """

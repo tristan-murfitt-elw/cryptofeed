@@ -22,7 +22,7 @@ from cryptofeed.connection import AsyncConnection, WSAsyncConn
 from cryptofeed.defines import ASK, BID, BUY, FUNDING, L2_BOOK, OKCOIN, OPEN_INTEREST, UNDERLYING_INDEX, SELL, TICKER, TRADES, LIQUIDATIONS, ORDER_INFO
 from cryptofeed.exceptions import BadChecksum
 from cryptofeed.feed import Feed
-from cryptofeed.standards import timestamp_normalize, is_authenticated_channel
+from cryptofeed.standards import feed_to_exchange, timestamp_normalize, is_authenticated_channel
 from cryptofeed.util import split
 
 
@@ -110,6 +110,11 @@ class OKCoin(Feed):
                     instrument_type = self.instrument_type(self.exchange_symbol_to_std_symbol(symbol))
                     if instrument_type != 'swap' and 'funding' in chan:
                         continue  # No funding for spot, futures and options
+
+                    if instrument_type == 'index':
+                        if chan != feed_to_exchange(self.id, UNDERLYING_INDEX):
+                            continue # Only use index symbols for the index feed
+                        symbol = self._translate_index_symbol(symbol, True)
                     yield f"{chan.format(instrument_type)}:{symbol}"
 
     async def _ticker(self, msg: dict, timestamp: float):
@@ -149,7 +154,7 @@ class OKCoin(Feed):
         {'table': 'index/ticker', 'data': [{'instrument_id': 'BTC-USD', 'last': '3977.74', 'open_24h': '3978.21', 'high_24h': '3995.43', 'low_24h': '3961.02', 'timestamp': '2019-03-22T22:26:34.019Z'}]}
         """
         for update in msg['data']:
-            pair = update['instrument_id']
+            pair = self._translate_index_symbol(update['instrument_id'], False)
             update_timestamp = timestamp_normalize(self.id, update['timestamp'])
             price = Decimal(update['last'])
             await self.callback(UNDERLYING_INDEX, feed=self.id,

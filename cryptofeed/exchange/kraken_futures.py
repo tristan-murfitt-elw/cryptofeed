@@ -15,7 +15,7 @@ from sortedcontainers import SortedDict as sd
 from yapic import json
 
 from cryptofeed.connection import AsyncConnection
-from cryptofeed.defines import BID, ASK, BUY, FUNDING, KRAKEN_FUTURES, L2_BOOK, OPEN_INTEREST, UNDERLYING_INDEX, SELL, TICKER, TRADES, INDEX_PREFIX
+from cryptofeed.defines import BID, ASK, BUY, FUNDING, KRAKEN_FUTURES, L2_BOOK, OPEN_INTEREST, UNDERLYING_INDEX, SELL, TICKER, TRADES, INDEX_PREFIX, INDEX_PRICE_POLL_SLEEP_SECONDS
 from cryptofeed.exceptions import MissingSequenceNumber
 from cryptofeed.feed import Feed
 from cryptofeed.standards import feed_to_exchange, timestamp_normalize
@@ -23,13 +23,13 @@ from cryptofeed.standards import feed_to_exchange, timestamp_normalize
 
 LOG = logging.getLogger('feedhandler')
 
+INDEX_PRODUCT_TYPE = 'Real Time Index'
+INDEX_PRODUCT_PREFIX = 'in_'
 
 class KrakenFutures(Feed):
     id = KRAKEN_FUTURES
     api = 'https://futures.kraken.com/derivatives/api'
     symbol_endpoint = 'https://futures.kraken.com/derivatives/api/v3/instruments'
-    index_product_type = 'Real Time Index'
-    index_product_prefix = 'in'
 
     @classmethod
     def _parse_symbol_data(cls, data: dict, symbol_separator: str) -> Tuple[Dict, Dict]:
@@ -38,7 +38,7 @@ class KrakenFutures(Feed):
             'FV': 'Vanilla Futures',
             'PI': 'Perpetual Inverse Futures',
             'PV': 'Perpetual Vanilla Futures',
-            'IN': cls.index_product_type,
+            'IN': INDEX_PRODUCT_TYPE,
             'RR': 'Reference Rate',
         }
         ret = {}
@@ -57,17 +57,29 @@ class KrakenFutures(Feed):
                 info['underlying'][normalized] = entry['underlying']
                 info['product_type'][normalized] = _kraken_futures_product_type[normalized[:2]]
             else:
-                if entry['symbol'][:2] == cls.index_product_prefix: # Index
-                    normalized = entry['symbol']
-                    info['product_type'][normalized] = _kraken_futures_product_type[normalized[:2].upper()]
+                if entry['symbol'].startswith(INDEX_PRODUCT_PREFIX): # Index
+                    normalized = cls._translate_index_symbol(entry['symbol'], False)
+                    info['product_type'][normalized] = INDEX_PRODUCT_TYPE
                 else:
                     continue
             ret[normalized] = entry['symbol']
         return ret, info
 
     @classmethod
-    def product_type(cls, symbol: str):
-        return cls.info()['product_type'][symbol]
+    def _translate_index_symbol(cls, symbol: str, is_outbound: bool) -> str:
+        """
+        Override base method for translating index symbols because BitMEX indexes use the dot (.)
+        """
+        if is_outbound:
+            # Outbound (to exchange API), remove INDEX_PREFIX and add .
+            return f'{INDEX_PRODUCT_PREFIX}{symbol[len(INDEX_PREFIX):]}'
+        else:
+            return f'{INDEX_PREFIX}{symbol[len(INDEX_PRODUCT_PREFIX):]}'
+
+    @classmethod
+    def _is_index(cls, symbol: str):
+        product_type = cls.info()['product_type'][symbol]
+        return product_type == INDEX_PRODUCT_TYPE
 
     def __init__(self, **kwargs):
         super().__init__('wss://futures.kraken.com/ws/v1', **kwargs)
@@ -82,7 +94,17 @@ class KrakenFutures(Feed):
         self.__reset()
         for chan in self.subscription:
             if chan == feed_to_exchange(self.id, UNDERLYING_INDEX):
-                asyncio.create_task(self._index_price(self.subscription[chan]))
+                # Construct a list of index symbols
+                index_symbols = []
+                for s in self.subscription[chan]:
+                    if self._is_index(self.exchange_symbol_to_std_symbol(s)):
+                        # Remove INDEX_PREFIX from symbol that we will send to the REST API
+                        outbound_symbol = self._translate_index_symbol(s, True)
+                        index_symbols.append(outbound_symbol)
+
+                if index_symbols:
+                    # Create background task to fetch index prices
+                    asyncio.create_task(self._index_price(self.subscription[chan]))
             else:
                 await conn.write(json.dumps(
                     {
@@ -248,13 +270,19 @@ class KrakenFutures(Feed):
         last_update = {}
 
         while True:
-            # Fetch all tickers
+            # Fetch all tickers, then check which ones we're subscribed to and publish updates for them
             end_point = f"{self.api}/v3/tickers"
             data = await self.http_conn.read(end_point)
             data = json.loads(data, parse_float=Decimal)
             timestamp = time.time()
             for ticker in data['tickers']:
-                if ticker['symbol'] not in pairs or self.product_type(self.exchange_symbol_to_std_symbol(ticker['symbol'])) != self.index_product_type:
+                if ticker['symbol'] not in pairs:
+                    # Not subscribed to this pair, skip.
+                    continue
+                
+                std_symbol = self.exchange_symbol_to_std_symbol(ticker['symbol'])
+                if not self._is_index(std_symbol):
+                    # Pair is not an index, skip.
                     continue
                 
                 # Check if values have changed
@@ -263,16 +291,15 @@ class KrakenFutures(Feed):
 
                 await self.callback(UNDERLYING_INDEX,
                                             feed=self.id,
-                                            symbol=self.exchange_symbol_to_std_symbol(ticker['symbol']),
+                                            symbol=std_symbol,
                                             timestamp=ticker['lastTime'].timestamp(),
                                             receipt_timestamp=timestamp,
                                             price=Decimal(ticker['last'])
                                             )
                 last_update[ticker['symbol']] = ticker
-            await asyncio.sleep(1)
+            await asyncio.sleep(INDEX_PRICE_POLL_SLEEP_SECONDS)
 
     async def message_handler(self, msg: str, conn, timestamp: float):
-
         msg = json.loads(msg, parse_float=Decimal)
 
         if 'event' in msg:

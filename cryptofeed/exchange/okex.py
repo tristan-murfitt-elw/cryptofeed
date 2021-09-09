@@ -36,10 +36,10 @@ class OKEx(OKCoin):
 
         for entry in data:
             for e in entry:
-                if isinstance(e, str):
+                if cls._entry_is_index_symbol(e):
                     # Index
-                    standard_symbol = f'{INDEX_PREFIX}{e.replace("-", symbol_separator)}'
-                    ret[standard_symbol] = e
+                    standard_symbol = cls._translate_index_symbol(e, False)
+                    ret[standard_symbol] = standard_symbol
                 else:
                     standard_symbol = e['instrument_id'].replace("-", symbol_separator)
                     ret[standard_symbol] = e['instrument_id']
@@ -54,11 +54,19 @@ class OKEx(OKCoin):
                 instrument_type = 'option'
             if symbol[-4:] == "SWAP":  # BTC-USDT-SWAP
                 instrument_type = 'swap'
-            if INDEX_PREFIX in symbol:
+            if symbol.startswith(INDEX_PREFIX):
                 instrument_type = 'index'
             info['instrument_type'][symbol] = instrument_type
 
         return ret, info
+
+    @classmethod
+    def _entry_is_index_symbol(cls, entry) -> bool:
+        """
+        Returns true if the entry is an index symbol. In the OkEX API,
+        index data is returned as an array of strings, while regular symbols are an array of dictionaries
+        """
+        return isinstance(entry, str)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

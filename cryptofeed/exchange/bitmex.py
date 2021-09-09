@@ -20,10 +20,11 @@ from yapic import json
 
 from cryptofeed.defines import BID, ASK, BITMEX, BUY, FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, SELL, TICKER, TRADES, UNDERLYING_INDEX, UNFILLED, INDEX_PREFIX
 from cryptofeed.feed import Feed
-from cryptofeed.standards import timestamp_normalize
+from cryptofeed.standards import feed_to_exchange, timestamp_normalize
 
 
 LOG = logging.getLogger('feedhandler')
+BITMEX_INDEX_SYMBOL = '.'
 
 
 class Bitmex(Feed):
@@ -38,9 +39,9 @@ class Bitmex(Feed):
 
         for entry in data:
             exchangeSymbol = entry['symbol']
-            if exchangeSymbol[0] == '.':
+            if exchangeSymbol.startswith(BITMEX_INDEX_SYMBOL):
                 # Need to replace the dot on the index symbol
-                exchangeSymbol = f'{INDEX_PREFIX}{exchangeSymbol[1:]}'
+                exchangeSymbol = cls._translate_index_symbol(exchangeSymbol, False)
                 normalized = exchangeSymbol
                 info['index'][normalized] = True
             else:
@@ -63,8 +64,15 @@ class Bitmex(Feed):
         return ret, info
 
     @classmethod
-    def is_index(cls, symbol: str):
-        return cls.info()['index'].get(symbol, False)
+    def _translate_index_symbol(cls, symbol: str, is_outbound: bool) -> str:
+        """
+        Override base method for translating index symbols because BitMEX indexes use the dot (.)
+        """
+        if is_outbound:
+            # Outbound (to exchange API), remove INDEX_PREFIX and add .
+            return f'{BITMEX_INDEX_SYMBOL}{symbol[len(INDEX_PREFIX):]}'
+        else:
+            return f'{INDEX_PREFIX}{symbol[len(BITMEX_INDEX_SYMBOL):]}'
 
     def __init__(self, sandbox=False, **kwargs):
         auth_api = 'wss://www.bitmex.com/realtime' if not sandbox else 'wss://testnet.bitmex.com/realtime'
@@ -97,19 +105,15 @@ class Bitmex(Feed):
         """
         for data in msg['data']:
             ts = timestamp_normalize(self.id, data['timestamp'])
-            if data['symbol'][0] == '.':
-                # Replace "." with INDEX_PREFIX
-                symbol = self.exchange_symbol_to_std_symbol(INDEX_PREFIX + data['symbol'][1:])
-            else:
-                symbol = self.exchange_symbol_to_std_symbol(data['symbol'])
-            
-            if self.is_index(symbol):
+            if data['symbol'].startswith(BITMEX_INDEX_SYMBOL):
+                symbol = self.exchange_symbol_to_std_symbol(self._translate_index_symbol(data['symbol'], False))
                 await self.callback(UNDERLYING_INDEX, feed=self.id,
                                     symbol=symbol,
                                     timestamp=ts,
                                     receipt_timestamp=timestamp,
                                     price=Decimal(data['price']))
             else:
+                symbol = self.exchange_symbol_to_std_symbol(data['symbol'])
                 await self.callback(TRADES, feed=self.id,
                                     symbol=symbol,
                                     side=BUY if data['side'] == 'Buy' else SELL,
@@ -125,8 +129,6 @@ class Bitmex(Feed):
         """
         # PERF perf_start(self.id, 'book_msg')
 
-        if not msg['data']:
-            return
         delta = {BID: [], ASK: []}
         # if we reset the book, force a full update
         forced = False
@@ -190,8 +192,6 @@ class Bitmex(Feed):
 
     async def _ticker(self, msg: dict, timestamp: float):
         for data in msg['data']:
-            if data['symbol'][0] == '.':
-                continue
             symbol = self.exchange_symbol_to_std_symbol(data['symbol'])
             extra_fields = {
                 'bbo': self.get_book_bbo(symbol),
@@ -239,8 +239,6 @@ class Bitmex(Feed):
             ts = timestamp_normalize(self.id, data['timestamp'])
             interval = data['fundingInterval']
             interval = int((interval - dt(interval.year, interval.month, interval.day, tzinfo=interval.tzinfo)).total_seconds())
-            if data['symbol'][0] == '.':
-                continue
             await self.callback(FUNDING, feed=self.id,
                                 symbol=self.exchange_symbol_to_std_symbol(data['symbol']),
                                 timestamp=ts,
@@ -488,8 +486,6 @@ class Bitmex(Feed):
         for data in msg['data']:
             if 'openInterest' in data:
                 ts = timestamp_normalize(self.id, data['timestamp'])
-                if data['symbol'][0] == '.':
-                    continue
                 await self.callback(OPEN_INTEREST, feed=self.id,
                                     symbol=self.exchange_symbol_to_std_symbol(data['symbol']),
                                     open_interest=data['openInterest'],
@@ -510,8 +506,6 @@ class Bitmex(Feed):
         """
         if msg['action'] == 'insert':
             for data in msg['data']:
-                if data['symbol'][0] == '.':
-                    continue
                 await self.callback(LIQUIDATIONS, feed=self.id,
                                     symbol=self.exchange_symbol_to_std_symbol(data['symbol']),
                                     side=BUY if data['side'] == 'Buy' else SELL,
@@ -560,9 +554,12 @@ class Bitmex(Feed):
         chans = []
         for chan in self.subscription:
             for pair in self.subscription[chan]:
-                if INDEX_PREFIX in pair:
-                    # Replace INDEX_PREFIX with a dot (as used by the exchange)
-                    pair = f'.{pair[len(INDEX_PREFIX):]}'
+                if pair.startswith(INDEX_PREFIX):
+                    if chan != feed_to_exchange(self.id, UNDERLYING_INDEX):
+                        # For index symbols, skip every channel except the index channel
+                        continue
+                    pair = self._translate_index_symbol(pair, True)
+                
                 chans.append(f"{chan}:{pair}")
 
         for i in range(0, len(chans), 10):

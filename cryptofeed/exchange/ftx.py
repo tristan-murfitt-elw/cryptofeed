@@ -21,7 +21,7 @@ from yapic import json
 from cryptofeed.connection import AsyncConnection
 from cryptofeed.defines import BID, ASK, BUY, USER_FILLS
 from cryptofeed.defines import FTX as FTX_id
-from cryptofeed.defines import FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, UNDERLYING_INDEX, SELL, TICKER, TRADES, FILLED, INDEX_PREFIX
+from cryptofeed.defines import FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, UNDERLYING_INDEX, SELL, TICKER, TRADES, FILLED, INDEX_PRICE_POLL_SLEEP_SECONDS
 from cryptofeed.exceptions import BadChecksum
 from cryptofeed.feed import Feed
 from cryptofeed.standards import feed_to_exchange, is_authenticated_channel, normalize_channel, timestamp_normalize
@@ -45,22 +45,27 @@ class FTX(Feed):
             symbol = d['name']
             ret[normalized] = symbol
             info['tick_size'][normalized] = d['priceIncrement']
-            if symbol[-4:] == 'PERP':
-                # Add an index symbol
-                underlying = d['underlying']
-                index_normalized = f'{INDEX_PREFIX}{underlying}{symbol_separator}USD'
-                ret[index_normalized] = index_normalized
-                info['underlying_index'][index_normalized] = symbol
-                info['no_ws'][index_normalized] = True
+            
+            # Add index symbol
+            underlying = d['underlying']
+            index_symbol = f'{underlying}{symbol_separator}USD' # FTX indexes are priced in USD
+            index_normalized = cls._translate_index_symbol(index_symbol, False)
+            ret[index_normalized] = index_normalized
+            info['index_to_derivative'][index_normalized] = symbol
+            info['is_index'][index_normalized] = True
         return ret, info
 
     @classmethod
-    def underlying_index(cls, symbol: str):
-        return cls.info()['underlying_index'].get(symbol, None)
+    def _index_to_derivative(cls, symbol: str):
+        """
+        Returns a derivative (e.g. future, perpetual) associated with the given index symbol,
+        or None if the given symbol is not an index symbol.
+        """
+        return cls.info()['index_to_derivative'].get(symbol, None)
 
     @classmethod
-    def no_ws(cls, symbol: str):
-        return cls.info()['no_ws'].get(symbol, False)
+    def _is_index(cls, symbol: str):
+        return cls.info()['is_index'].get(symbol, False)
 
     def __init__(self, **kwargs):
         super().__init__('wss://ftexchange.com/ws/', **kwargs)
@@ -98,7 +103,15 @@ class FTX(Feed):
                 asyncio.create_task(self._open_interest(symbols))  # TODO: use HTTPAsyncConn
                 continue
             if chan == feed_to_exchange(self.id, UNDERLYING_INDEX):
-                asyncio.create_task(self._index_price(symbols))
+                # Construct a list of index symbols
+                index_symbols = []
+                for s in symbols:
+                    if self._is_index(s):
+                        index_symbols.append(s)
+                
+                if index_symbols:
+                    # Create background task to fetch index prices
+                    asyncio.create_task(self._index_price(symbols))
                 continue
             if is_authenticated_channel(normalize_channel(self.id, chan)):
                 await conn.write(json.dumps(
@@ -109,7 +122,7 @@ class FTX(Feed):
                 ))
                 continue
             for pair in symbols:
-                if not self.no_ws(pair):
+                if not self._is_index(pair):
                     await conn.write(json.dumps(
                         {
                             "channel": chan,
@@ -357,12 +370,11 @@ class FTX(Feed):
         last_update = {}
 
         while True:
-            # Fetch all futures we are subscribed to. Unfortunately the Kraken Futures API doesn't allow us to only fetch the futures we need
             for index_name in pairs:
-                future_name = self.underlying_index(index_name)
-                if not future_name:
+                derivative = self._index_to_derivative(index_name)
+                if not derivative:
                     continue
-                end_point = f"{self.api}/futures/{future_name}"
+                end_point = f"{self.api}/futures/{derivative}"
                 data = await self.http_conn.read(end_point)
                 data = json.loads(data, parse_float=Decimal)
                 timestamp = time()
@@ -378,7 +390,7 @@ class FTX(Feed):
                                             price=Decimal(future['index'])
                                             )
                 last_update[future['name']] = future
-            await asyncio.sleep(1)
+            await asyncio.sleep(INDEX_PRICE_POLL_SLEEP_SECONDS)
 
     async def message_handler(self, msg: str, conn, timestamp: float):
         msg = json.loads(msg, parse_float=Decimal)
