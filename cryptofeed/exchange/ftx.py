@@ -48,6 +48,8 @@ class FTX(Feed):
             
             # Add index symbol
             underlying = d['underlying']
+            if underlying is None:
+                continue
             index_symbol = f'{underlying}{symbol_separator}USD' # FTX indexes are priced in USD
             index_normalized = cls._translate_index_symbol(index_symbol, False)
             ret[index_normalized] = index_normalized

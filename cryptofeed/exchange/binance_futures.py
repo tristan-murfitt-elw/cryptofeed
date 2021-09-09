@@ -31,7 +31,8 @@ class BinanceFutures(Binance):
             if cls._is_index_symbols_result(symbols_result):
                 for index in symbols_result:
                     # Index symbol
-                    exchange_symbol = cls._translate_index_symbol(index['symbol'], False)
+                    exchange_symbol = index['symbol'].split('_')[0] # Removes future dates, e.g. BTCUSDT_210924
+                    exchange_symbol = cls._translate_index_symbol(exchange_symbol, False)
                     ret[exchange_symbol] = exchange_symbol
             else:
                 # Regular symbols
