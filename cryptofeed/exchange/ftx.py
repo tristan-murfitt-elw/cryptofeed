@@ -50,8 +50,7 @@ class FTX(Feed):
             underlying = d['underlying']
             if underlying is None:
                 continue
-            index_symbol = f'{underlying}{symbol_separator}USD' # FTX indexes are priced in USD
-            index_normalized = cls._translate_index_symbol(index_symbol, False)
+            index_normalized = cls._translate_index_symbol(underlying, False)
             ret[index_normalized] = index_normalized
             info['index_to_derivative'][index_normalized] = symbol
             info['is_index'][index_normalized] = True
