@@ -1,14 +1,89 @@
 ## Changelog
 
-### 1.9.2
+### 2.0.0
+ * Feature: Binance REST support
+ * Feature: Add next funding rate data to FTX funding data
+ * Bugfix: Kraken info dict returning empty
+ * Breaking Change: Rename REST endpoints. Sync endpoints end with `_sync`, non-sync endpoints are now async. Clean up and remove old/unused test cases
+ * Feature: Remove pandas dependency
+ * Breaking Change: Rewrite all rest endpoints to support sync and async versions of the endpoint.
+ * Feature: Add dYdX REST endpoints
+ * Feature: Add support for Binance trading REST API
+ * Bugfix: Fix typo by renaming rest_options to order_options
+ * Bugfix: Use correct max depth for Binance (and its child classes).
+ * Bugfix: Fix test data generation, fix Binance test cases, clean up and fix issues in various code samples in example/
+ * Feature: BinanceUS rest mixin
+ * Update: add feed/exchange cleanup to integration tests
+ * Bugfix: Last message received not being correctly set on websocket connection, causing multiple restarts when an exchange encounters a timeout
+ * Bugfix: Binance Futures not correctly formatting the side on liquidations
+ * Bugfix: Interval from candle_sync was not being passed correctly to async candle interface in REST mixins.
+ * Update: Cleanup Coinbase candle REST interface, use standard string interval
+ * Feature: Add balances to Bybit
+ * Bugfix: Kraken valid depths incorrect
+ * Feature: Add support for gracefully stopping Redis backends and writing queued message
+ * Bugfix: OKEx incorrect creating multiple connections
+ * Breaking Change: Data types for majority of callbacks have changed to Objects (previously was a dict)
+ * Update: Remove redundant example code
+ * Breaking Change: OrderInfo now an object
+ * Bugfix: NBBO updated to use new orderbook
+ * Breaking Change: Balance callback changed to return object
+ * Breaking Change: L1_Book callback returns object
+ * Update: Subscribe to 200 levels per side for Bybit
+ * Feature: Candles support added to Binance REST
+ * Breaking Change: Candle REST methods return Candle object
+ * Feature: data objects now hashable and comparable (equal only)
+ * Breaking Changes: USER_FILLS renamed FILLS, FILLS not use data objects for callbacks
+ * Feature: Add support for candles in FTX REST
+ * Feature: Add support for candles in Bitstamp REST
+
+### 1.9.3 (2021-08-05)
+  * Feature: Add support for private channel USER_DATA, public channel LAST_PRICE on Phemex
+  * Feature: Add support for private channels FILLS, ORDER_INFO, BALANCES on Deribit
+  * Feature: Add support for public channel L1_BOOK on Deribit
+  * Feature: Add support for private channels FILLS and ORDER_INFO on Bybit
+  * Bugfix: Fix demo.py
+  * Feature: Allow user to specify a delay when starting an exchange connection (useful for avoiding 429s when creating a large number of feeds)
+  * Update: Support Okex v5
+  * Breaking Change: Update symbol standardization. Now uses standard names across all exchanges for futures, swaps, and options.
+  * Feature: Allow user to specify depth_interval for Binance L2_BOOK.
+  * Bugfix: Use order id in FTX fill channel callback
+  * Feature: Add ability to use the Symbols class to identify all exchanges that support a given instrument
+  * Feature: Allow user to specify 'http_proxy' in feeds.
+  * Feature: Add support for 'concurrent_http' requests in Binance feeds.
+  * Bugfix: funding and open interest data not being collected
+  * Breaking Change: Rework how REST endpoints are integrated into exchange classes. Rest module has been removed. REST methods are part of exchanges classes.
+  * Feature: Add support for funding data in Bybit
+  * Update: Correct and update sections of the documentation.
+  * Feature: Add support for open_interest_interval in Binance Futures.
+  * Bugfix: Fix subaccounts impl in FTX
+
+### 1.9.2 (2021-07-14)
   * Bugfix: add config kwarg to add_nbbo method
   * Update: changed KuCoin authentication to match new signing method
   * Bugfix: #518 - fix aggregator example code
   * Update: Support Bittrex V3
   * Feature: Add support for candles on Bittrex
-  * Feature: Add support to authenticate private channels (e.g. USER_FILLS) on FTX
+  * Feature: Add support to authenticate private channels (e.g. FILLS) on FTX
   * Feature: Support private rest api commands for FTX
-
+  * Update: Improve impl for FTX rest api
+  * Bugfix: #528 - Fix standardisation of Deribit's symbols when passed to callbacks
+  * Feature: Add support for private "orders" channel on FTX
+  * Feature: Add support for subaccounts in feeds and REST API for FTX
+  * Bugfix: Fix FTX rest api return value
+  * Exchange: New exchange - dYdX
+  * Bugfix: Issue #531 - Gemini symbol generation included closed symbols
+  * Feature: Allow user to override the score used in Redis ZSETs
+  * Update: Get information about size increment from FTX symbol data
+  * Bugfix: Fix trades write for Arctic backend
+  * Feature: new exchange: Bequant. Supports ticker, L2 book, trades, candles, plus authenticated channels: order info, account transactions and account balances
+  * Update: BitMax renamed AscendEX
+  * Bugfix: Feed level timeout and timeout interval not being set properly
+  * Exchange: Phemex exchange support
+  * Features: added support for candles, order info, account transactions and account balances to HitBTC & Bitcoin.com, plus authentication where required to access these channels
+  * Update: previous HitBTC & Bitcoin.com websocket endpoints deprecated. Now using separate Market, Trading and Account endpoints
+  * Bugfix: max_depth on Binance and Kraken was not properly used when querying the snapshot
+  * Bugfix: Handle 429s in HTTP connections (by waiting and retrying).
+  
 ### 1.9.1 (2021-06-10)
   * Feature: add Bithumb exchange - l2 book and trades
   * Bugfix: Fix inverted Poloniex symbols
@@ -90,8 +165,10 @@
   * Update: Poloniex changed signaure of ticker data
   * Feature: Candles for Binance Futures
   * Feature: Premium Index Candle support for Binance Futures
-  * Feature: Update Gateio to use new v4 websocket api. Adds support for candles 
-
+  * Feature: Update Gateio to use new v4 websocket api. Adds support for candles
+  * Bugfix: Fix open interest on OKEx
+  * Bugfix: OKEx was duplicating subscriptions
+  * Breaking Change: Core callbacks (trade, candle, books, ticker, open interest, funding, liquidations, index) now use custom objects
 
 ### 1.7.0 (2021-02-15)
   * Feature: Use UVLoop if installed (not available on windows)

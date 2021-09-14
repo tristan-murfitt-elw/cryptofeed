@@ -9,11 +9,12 @@ Handles multiple cryptocurrency exchange data feeds and returns normalized and s
 
 ## Supported exchanges
 
+* [AscendEX](https://ascendex.com/)
+* [Bequant](https://bequant.io/)
 * [Bitcoin.com](https://www.bitcoin.com/)
 * [Bitfinex](https://bitfinex.com)
 * [bitFlyer](https://bitflyer.com/)
 * [Bithumb](https://en.bithumb.com/)
-* [BitMax](https://bitmax.io/)
 * [Bitstamp](https://www.bitstamp.net/)
 * [Bittrex](https://global.bittrex.com/)
 * [Blockchain.com](https://www.blockchain.com/)
@@ -25,6 +26,7 @@ Handles multiple cryptocurrency exchange data feeds and returns normalized and s
 * [BitMEX](https://www.bitmex.com/)
 * [Coinbase](https://www.coinbase.com/)
 * [Deribit](https://www.deribit.com/)
+* [dYdX](https://dydx.exchange/)
 * [EXX](https://www.exx.com/)
 * [FTX](https://ftx.com/)
 * [FTX US](https://ftx.us/)
@@ -39,13 +41,10 @@ Handles multiple cryptocurrency exchange data feeds and returns normalized and s
 * [KuCoin](https://www.kucoin.com/)
 * [OKCoin](http://okcoin.com/)
 * [OKEx](https://www.okex.com/)
+* [Phemex](https://phemex.com/)
 * [Poloniex](https://www.poloniex.com/)
 * [ProBit](https://www.probit.com/)
 * [Upbit](https://sg.upbit.com/home)
-
-## Supported aggregated crypto data providers
-
-* [Coingecko](https://www.coingecko.com/en)
 
 
 ## Basic Usage
@@ -60,9 +59,9 @@ fh = FeedHandler()
 
 # ticker, trade, and book are user defined functions that
 # will be called when ticker, trade and book updates are received
-ticker_cb = {TICKER: TickerCallback(ticker)}
-trade_cb = {TRADES: TradeCallback(trade)}
-gemini_cb = {TRADES: TradeCallback(trade), L2_BOOK: BookCallback(book)}
+ticker_cb = {TICKER: ticker}
+trade_cb = {TRADES: trade}
+gemini_cb = {TRADES: trade, L2_BOOK: book}
 
 
 fh.add_feed(Coinbase(symbols=['BTC-USD'], channels=[TICKER], callbacks=ticker_cb))
@@ -104,25 +103,23 @@ Cryptofeed supports the following channels from exchanges:
 
 ### Market Data Channels (Public)
 
+* L1_BOOK - Top of book
 * L2_BOOK - Price aggregated sizes. Some exchanges provide the entire depth, some provide a subset.
 * L3_BOOK - Price aggregated orders. Like the L2 book, some exchanges may only provide partial depth.
 * TRADES - Note this reports the taker's side, even for exchanges that report the maker side.
 * TICKER
 * FUNDING
-* BOOK_DELTA - Subscribed to with L2 or L3 books, receive book deltas rather than the entire book on updates. Full updates will be periodically sent on the L2 or L3 channel. If BOOK_DELTA is enabled, only L2 or L3 book can be enabled, not both. To receive both create two `feedhandler` objects. Not all exchanges are supported, as some exchanges send complete books on every update.
 * OPEN_INTEREST - Open interest data.
 * LIQUIDATIONS
-* FUTURES_INDEX
+* INDEX
 * CANDLES - Candlestick / K-Line data.
-
-Aggregated data from provider is available in channel:
-
-* MARKET_INFO - current aggregated price, market cap, volume (in USD, BTC or ETH currency), total and circulating supply,
- as well as community data (twitter, reddit, facebook...) and scores (coingecko, developer, community...)
 
 ### Authenticated Data Channels
 
 * ORDER_INFO - Order status updates
+* TRANSACTIONS - Real-time updates on account deposits and withdrawals
+* BALANCES - Updates on wallet funds
+* FILLS - User's executed trades
 
 
 ## Backends
@@ -136,7 +133,7 @@ Supported Backends:
 * UDP Sockets
 * TCP Sockets
 * Unix Domain Sockets
-* [InfluxDB 2](https://github.com/influxdata/influxdb)
+* [InfluxDB v2](https://github.com/influxdata/influxdb)
 * MongoDB
 * Kafka
 * Elastic Search
@@ -172,7 +169,7 @@ See more options, explanations and Pipenv usage in [INSTALL.md](https://github.c
 
 ## Rest API
 
-Cryptofeed supports some REST interfaces for retrieving historical data and placing orders. See the [rest](https://github.com/bmoscon/cryptofeed/tree/master/cryptofeed/rest) package.
+Cryptofeed supports some REST interfaces for retrieving real-time and historical data. These are integrated into the exchange classes directly. You can view the supported methods by calling the `info()` method on any exchange.
 
 
 ## Future Work
