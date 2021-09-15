@@ -34,7 +34,7 @@ class Test(TestCommand):
 setup(
     name="cryptofeed",
     ext_modules=cythonize("cryptofeed/types.pyx", language_level=3),
-    version="2.0.0",
+    version="2.0.1",
     author="Bryant Moscon",
     author_email="bmoscon@gmail.com",
     description="Cryptocurrency Exchange Websocket Data Feed Handler",
@@ -63,7 +63,7 @@ setup(
     tests_require=["pytest"],
     install_requires=[
         "requests>=2.18.4",
-        "websockets>=7.0",
+        "websockets>=10.0",
         "pyyaml",
         "aiohttp>=3.7.1, < 4.0.0",
         "aiofile>=2.0.0",
