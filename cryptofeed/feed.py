@@ -174,14 +174,14 @@ class Feed(Exchange):
 
     async def book_callback(self, book_type: str, book: OrderBook, receipt_timestamp: float, timestamp=None, raw=None, sequence_number=None, checksum=None, delta=None):
         if self.cross_check:
-            self.check_bid_ask_overlapping(book)
+            self.check_bid_ask_overlapping(book.book)
 
         book.timestamp = timestamp
         book.raw = raw
         book.sequence_number = sequence_number
         book.delta = delta
         book.checksum = checksum
-        await self.callback(book_type, book, receipt_timestamp)
+        await self.callback(book_type, book, receipt_timestamp, bbo=self.get_book_bbo(book.symbol))
 
     def get_book_bbo(self, symbol: str, book_type: str = L2_BOOK) -> dict:
         """ Return OrderBook's best bid and offer (including sizes) """
@@ -212,9 +212,9 @@ class Feed(Exchange):
             }
 
     def check_bid_ask_overlapping(self, book):
-        bid, ask = book[BID], book[ASK]
+        bid, ask = book.bids, book.asks
         if len(bid) > 0 and len(ask) > 0:
-            best_bid, best_ask = bid.keys()[-1], ask.keys()[0]
+            best_bid, best_ask = bid.index(0)[0], ask.index(0)[0]
             if best_bid >= best_ask:
                 raise BidAskOverlapping(f"{self.id} - {book.symbol}: best bid {best_bid} >= best ask {best_ask}")
 
