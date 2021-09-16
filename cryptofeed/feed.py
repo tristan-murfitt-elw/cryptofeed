@@ -4,33 +4,30 @@ Copyright (C) 2017-2021  Bryant Moscon - bmoscon@gmail.com
 Please see the LICENSE file for the terms and conditions
 associated with this software.
 '''
-import os
 import logging
 from decimal import Decimal
 from functools import partial
+from typing import Tuple, Callable, Union, List
 from collections import defaultdict
-from typing import Dict, Tuple, Callable, Union, List
+import logging
 
-from cryptofeed.symbols import Symbols
+from aiohttp.typedefs import StrOrURL
+
+from cryptofeed.exchange import Exchange
 from cryptofeed.callback import Callback
-from cryptofeed.config import Config
-from cryptofeed.connection import AsyncConnection, HTTPAsyncConn, HTTPSync, WSAsyncConn
+from cryptofeed.connection import AsyncConnection, HTTPAsyncConn, WSAsyncConn
 from cryptofeed.connection_handler import ConnectionHandler
-from cryptofeed.defines import (ASK, BID, BOOK_DELTA, CANDLES, FUNDING, FUTURES_INDEX, L2_BOOK, L3_BOOK, LIQUIDATIONS,
-                                OPEN_INTEREST, MARKET_INFO, ORDER_INFO, TICKER, TRADES, USER_FILLS)
-from cryptofeed.exceptions import BidAskOverlapping, UnsupportedDataFeed, UnsupportedSymbol
-from cryptofeed.standards import feed_to_exchange, is_authenticated_channel
-from cryptofeed.util.book import book_delta, depth
+from cryptofeed.defines import (ASK, BALANCES, BID, CANDLES, FUNDING, INDEX, L2_BOOK, L3_BOOK, LIQUIDATIONS,
+                                OPEN_INTEREST, ORDER_INFO, TICKER, TRADES, FILLS)
+from cryptofeed.exceptions import BidAskOverlapping
+from cryptofeed.types import OrderBook
 
 
 LOG = logging.getLogger('feedhandler')
 
 
-class Feed:
-    id = 'NotImplemented'
-    http_sync = HTTPSync()
-
-    def __init__(self, address: Union[dict, str], timeout=120, timeout_interval=30, retries=10, symbols=None, channels=None, subscription=None, config: Union[Config, dict, str] = None, callbacks=None, max_depth=None, book_interval=1000, snapshot_interval=False, checksum_validation=False, cross_check=False, origin=None, exceptions=None, log_message_on_error=False, sandbox=False):
+class Feed(Exchange):
+    def __init__(self, address: Union[dict, str], timeout=120, timeout_interval=30, retries=10, symbols=None, channels=None, subscription=None, callbacks=None, max_depth=0, checksum_validation=False, cross_check=False, origin=None, exceptions=None, log_message_on_error=False, delay_start=0, http_proxy: StrOrURL = None, **kwargs):
         """
         address: str, or dict
             address to be used to create the connection.
@@ -43,14 +40,12 @@ class Feed:
             Time, in seconds, between timeout checks.
         retries: int
             Number of times to retry a failed connection. Set to -1 for infinite
+        symbols: list of str, Symbol
+            A list of instrument symbols. Symbols must be of type str or Symbol
         max_depth: int
-            Maximum number of levels per side to return in book updates
-        book_interval: int
-            Number of updates between snapshots. Only applicable when book deltas are enabled.
-            Book deltas are enabled by subscribing to the book delta callback.
-        snapshot_interval: bool/int
-            Number of updates between snapshots. Only applicable when book delta is not enabled.
-            Updates between snapshots are not delivered to the client
+            Maximum number of levels per side to return in book updates. 0 is the default, and indicates no trimming of levels should be performed.
+        candle_interval: str
+            Length of time between a candle's Open and Close. Valid on exchanges with support for candles
         checksum_validation: bool
             Toggle checksum validation, when supported by an exchange.
         cross_check: bool
@@ -64,18 +59,13 @@ class Feed:
             on FeedHandler, specifically the `exception_handler` keyword argument.
         log_message_on_error: bool
             If an exception is encountered in the connection handler, log the raw message
-        sandbox: bool
-            enable sandbox mode for exchanges that support this
+        delay_start: int, float
+            a delay before starting the feed/connection to the exchange. If you are subscribing to a large number of feeds
+            on a single exchange, you may encounter 429s. You can use this to stagger the starts.
+        http_proxy: str
+            URL of proxy server. Passed to HTTPPoll and HTTPAsyncConn. Only used for HTTP GET requests.
         """
-        if isinstance(config, Config):
-            LOG.info('%s: reuse object Config containing the following main keys: %s', self.id, ", ".join(config.config.keys()))
-            self.config = config
-        else:
-            LOG.info('%s: create Config from type: %r', self.id, type(config))
-            self.config = Config(config)
-
-        self.sandbox = sandbox
-
+        super().__init__(**kwargs)
         self.log_on_error = log_message_on_error
         self.retries = retries
         self.exceptions = exceptions
@@ -84,38 +74,26 @@ class Feed:
         self.timeout_interval = timeout_interval
         self.subscription = defaultdict(set)
         self.address = address
-        self.book_update_interval = book_interval
-        self.snapshot_interval = snapshot_interval
         self.cross_check = cross_check
-        self.updates = defaultdict(int)
-        self.do_deltas = False
         self.normalized_symbols = []
         self.max_depth = max_depth
         self.previous_book = defaultdict(dict)
         self.origin = origin
         self.checksum_validation = checksum_validation
         self.ws_defaults = {'ping_interval': 10, 'ping_timeout': None, 'max_size': 2**23, 'max_queue': None, 'origin': self.origin}
-        self.key_id = os.environ.get(f'CF_{self.id}_KEY_ID') or self.config[self.id.lower()].key_id
-        self.key_secret = os.environ.get(f'CF_{self.id}_KEY_SECRET') or self.config[self.id.lower()].key_secret
-        self.key_passphrase = os.environ.get(f'CF_{self.id}_KEY_PASSWORD') or self.config[self.id.lower()].key_passphrase
         self.requires_authentication = False
         self._feed_config = defaultdict(list)
-        self.http_conn = HTTPAsyncConn(self.id)
-
-        symbols_cache = Symbols
-        if not symbols_cache.populated(self.id):
-            self.symbol_mapping()
-
-        self.normalized_symbol_mapping, self.exchange_info = symbols_cache.get(self.id)
-        self.exchange_symbol_mapping = {value: key for key, value in self.normalized_symbol_mapping.items()}
+        self.http_conn = HTTPAsyncConn(self.id, http_proxy)
+        self.http_proxy = http_proxy
+        self.start_delay = delay_start
 
         if subscription is not None and (symbols is not None or channels is not None):
             raise ValueError("Use subscription, or channels and symbols, not both")
 
         if subscription is not None:
             for channel in subscription:
-                chan = feed_to_exchange(self.id, channel)
-                if is_authenticated_channel(channel):
+                chan = self.std_channel_to_exchange(channel)
+                if self.is_authenticated_channel(channel):
                     if not self.key_id or not self.key_secret:
                         raise ValueError("Authenticated channel subscribed to, but no auth keys provided")
                     self.requires_authentication = True
@@ -124,7 +102,7 @@ class Feed:
                 self._feed_config[channel].extend(self.normalized_symbols)
 
         if symbols and channels:
-            if any(is_authenticated_channel(chan) for chan in channels):
+            if any(self.is_authenticated_channel(chan) for chan in channels):
                 if not self.key_id or not self.key_secret:
                     raise ValueError("Authenticated channel subscribed to, but no auth keys provided")
                 self.requires_authentication = True
@@ -134,32 +112,30 @@ class Feed:
             self.normalized_symbols = symbols
 
             symbols = [self.std_symbol_to_exchange_symbol(symbol) for symbol in symbols]
-            channels = list(set([feed_to_exchange(self.id, chan) for chan in channels]))
+            channels = list(set([self.std_channel_to_exchange(chan) for chan in channels]))
             self.subscription = {chan: symbols for chan in channels}
 
         self._feed_config = dict(self._feed_config)
 
-        self.l3_book = {}
-        self.l2_book = {}
+        self._l3_book = {}
+        self._l2_book = {}
         self.callbacks = {FUNDING: Callback(None),
-                          FUTURES_INDEX: Callback(None),
+                          INDEX: Callback(None),
                           L2_BOOK: Callback(None),
                           L3_BOOK: Callback(None),
                           LIQUIDATIONS: Callback(None),
                           OPEN_INTEREST: Callback(None),
-                          MARKET_INFO: Callback(None),
                           TICKER: Callback(None),
                           TRADES: Callback(None),
                           CANDLES: Callback(None),
                           ORDER_INFO: Callback(None),
-                          USER_FILLS: Callback(None),
+                          FILLS: Callback(None),
+                          BALANCES: Callback(None)
                           }
 
         if callbacks:
             for cb_type, cb_func in callbacks.items():
                 self.callbacks[cb_type] = cb_func
-                if cb_type == BOOK_DELTA:
-                    self.do_deltas = True
 
         for key, callback in self.callbacks.items():
             if not isinstance(callback, list):
@@ -196,118 +172,35 @@ class Feed:
             ret.append((WSAsyncConn(addr, self.id, **self.ws_defaults), self.subscribe, self.message_handler, self.authenticate))
         return ret
 
-    @classmethod
-    def info(cls) -> dict:
-        """
-        Return information about the Exchange - what trading symbols are supported, what data channels, etc
-
-        key_id: str
-            API key to query the feed, required when requesting supported coins/symbols.
-        """
-        symbols = cls.symbol_mapping()
-        data = Symbols.get(cls.id)[1]
-        data['symbols'] = list(symbols.keys())
-        data['channels'] = []
-        for channel in (FUNDING, FUTURES_INDEX, LIQUIDATIONS, L2_BOOK, L3_BOOK, OPEN_INTEREST, MARKET_INFO, TICKER, TRADES, CANDLES):
-            try:
-                feed_to_exchange(cls.id, channel, silent=True)
-                data['channels'].append(channel)
-            except UnsupportedDataFeed:
-                pass
-
-        return data
-
-    @classmethod
-    def symbols(cls, refresh=False) -> dict:
-        if refresh:
-            cls.symbol_mapping(refresh=True)
-        return cls.info()['symbols']
-
-    @classmethod
-    def symbol_mapping(cls, symbol_separator='-', refresh=False) -> Dict:
-        if Symbols.populated(cls.id) and not refresh:
-            return Symbols.get(cls.id)[0]
-        try:
-            LOG.debug("%s: reading symbol information from %s", cls.id, cls.symbol_endpoint)
-            if isinstance(cls.symbol_endpoint, list):
-                data = []
-                for ep in cls.symbol_endpoint:
-                    data.append(cls.http_sync.read(ep, json=True, uuid=cls.id))
-            else:
-                data = cls.http_sync.read(cls.symbol_endpoint, json=True, uuid=cls.id)
-            syms, info = cls._parse_symbol_data(data, symbol_separator)
-            Symbols.set(cls.id, syms, info)
-            return syms
-        except Exception as e:
-            LOG.error("%s: Failed to parse symbol information: %s", cls.id, str(e), exc_info=True)
-            raise
-
-    async def book_callback(self, book: dict, book_type: str, symbol: str, forced: bool, delta: dict, timestamp: float, receipt_timestamp: float):
-        """
-        Three cases we need to handle here
-
-        1.  Book deltas are enabled (application of max depth here is trivial)
-        1a. Book deltas are enabled, max depth is not, and exchange does not support deltas. Rare
-        2.  Book deltas not enabled, but max depth is enabled
-        3.  Neither deltas nor max depth enabled
-        4.  Book deltas disabled and snapshot intervals enabled (with/without max depth)
-
-        2 and 3 can be combined into a single block as long as application of depth modification
-        happens first
-
-        For 1, need to handle separate cases where a full book is returned vs a delta
-        """
-        if self.do_deltas:
-            if not forced and self.updates[symbol] < self.book_update_interval:
-                if self.max_depth:
-                    delta, book = await self.apply_depth(book, True, symbol)
-                    if not (delta[BID] or delta[ASK]):
-                        return
-                elif not delta:
-                    # this will only happen in cases where an exchange does not support deltas and max depth is not enabled.
-                    # this is an uncommon situation. Exchanges that do not support deltas will need
-                    # to populate self.previous internally to avoid the unncesessary book copy on all other exchanges
-                    delta = book_delta(self.previous_book[symbol], book, book_type=book_type)
-                    if not (delta[BID] or delta[ASK]):
-                        return
-                self.updates[symbol] += 1
-                if self.cross_check:
-                    self.check_bid_ask_overlapping(book, symbol)
-                await self.callback(BOOK_DELTA, feed=self.id, symbol=symbol, delta=delta, timestamp=timestamp, receipt_timestamp=receipt_timestamp, bbo=self.get_book_bbo(symbol))
-                if self.updates[symbol] != self.book_update_interval:
-                    return
-            elif forced and self.max_depth:
-                # We want to send a full book update but need to apply max depth first
-                _, book = await self.apply_depth(book, False, symbol)
-        elif self.max_depth:
-            if not self.snapshot_interval or (self.snapshot_interval and self.updates[symbol] >= self.snapshot_interval):
-                changed, book = await self.apply_depth(book, False, symbol)
-                if not changed:
-                    return
-        # case 4 - increment skipped update, and exit
-        if self.snapshot_interval and self.updates[symbol] < self.snapshot_interval:
-            self.updates[symbol] += 1
-            return
-
+    async def book_callback(self, book_type: str, book: OrderBook, receipt_timestamp: float, timestamp=None, raw=None, sequence_number=None, checksum=None, delta=None):
         if self.cross_check:
-            self.check_bid_ask_overlapping(book, symbol)
-        if book_type == L2_BOOK:
-            await self.callback(L2_BOOK, feed=self.id, symbol=symbol, book=book, timestamp=timestamp, receipt_timestamp=receipt_timestamp, bbo=self.get_book_bbo(symbol, book_type))
-        else:
-            await self.callback(L3_BOOK, feed=self.id, symbol=symbol, book=book, timestamp=timestamp, receipt_timestamp=receipt_timestamp, bbo=self.get_book_bbo(symbol, book_type))
-        self.updates[symbol] = 0
+            self.check_bid_ask_overlapping(book.book)
+
+        book.timestamp = timestamp
+        book.raw = raw
+        book.sequence_number = sequence_number
+        book.delta = delta
+        book.checksum = checksum
+        await self.callback(book_type, book, receipt_timestamp, bbo=self.get_book_bbo(book.symbol))
 
     def get_book_bbo(self, symbol: str, book_type: str = L2_BOOK) -> dict:
         """ Return OrderBook's best bid and offer (including sizes) """
         try:
             if book_type == L2_BOOK:
+                best_bid = (Decimal(), Decimal())
+                if len(self._l2_book[symbol].book.bids) > 0:
+                    best_bid = self._l2_book[symbol].book.bids.index(0)
+                best_ask = (Decimal(), Decimal())
+                if len(self._l2_book[symbol].book.asks) > 0:
+                    best_ask = self._l2_book[symbol].book.asks.index(0)
+
                 return {
-                    BID: self.l2_book[symbol][BID].peekitem(),
-                    ASK: self.l2_book[symbol][ASK].peekitem(0),
+                    BID: best_bid,
+                    ASK: best_ask,
                 }
             else:
-                bid = self.l3_book[symbol][BID].peekitem()
-                ask = self.l3_book[symbol][ASK].peekitem(0)
+                bid = self._l3_book[symbol].book[BID].index(0)
+                ask = self._l3_book[symbol].book[ASK].index(0)
                 return {
                     BID: (bid[0], sum(bid[1].values())),
                     ASK: (ask[0], sum(ask[1].values())),
@@ -318,27 +211,16 @@ class Feed:
                 ASK: (Decimal(), Decimal()),
             }
 
-    def check_bid_ask_overlapping(self, book, symbol):
-        bid, ask = book[BID], book[ASK]
+    def check_bid_ask_overlapping(self, book):
+        bid, ask = book.bids, book.asks
         if len(bid) > 0 and len(ask) > 0:
-            best_bid, best_ask = bid.keys()[-1], ask.keys()[0]
+            best_bid, best_ask = bid.index(0)[0], ask.index(0)[0]
             if best_bid >= best_ask:
-                raise BidAskOverlapping(f"{self.id} {symbol} best bid {best_bid} >= best ask {best_ask}")
+                raise BidAskOverlapping(f"{self.id} - {book.symbol}: best bid {best_bid} >= best ask {best_ask}")
 
-    async def callback(self, data_type, **kwargs):
+    async def callback(self, data_type, obj, receipt_timestamp, **kwargs):
         for cb in self.callbacks[data_type]:
-            await cb(**kwargs)
-
-    async def apply_depth(self, book: dict, do_delta: bool, symbol: str):
-        ret = depth(book, self.max_depth)
-        if not do_delta:
-            delta = self.previous_book[symbol] != ret
-            self.previous_book[symbol] = ret
-            return delta, ret
-
-        delta = book_delta(self.previous_book[symbol], ret)
-        self.previous_book[symbol] = ret
-        return delta, ret
+            await cb(obj, receipt_timestamp, **kwargs)
 
     async def message_handler(self, msg: str, conn: AsyncConnection, timestamp: float):
         raise NotImplementedError
@@ -376,7 +258,7 @@ class Feed:
         Create tasks for exchange interfaces and backends
         """
         for conn, sub, handler, auth in self.connect():
-            self.connection_handlers.append(ConnectionHandler(conn, sub, handler, auth, self.retries, exceptions=self.exceptions, log_on_error=self.log_on_error))
+            self.connection_handlers.append(ConnectionHandler(conn, sub, handler, auth, self.retries, timeout=self.timeout, timeout_interval=self.timeout_interval, exceptions=self.exceptions, log_on_error=self.log_on_error, start_delay=self.start_delay))
             self.connection_handlers[-1].start(loop)
 
         for callbacks in self.callbacks.values():
@@ -386,15 +268,3 @@ class Feed:
                     LOG.info('%s: starting backend task %s', self.id, cb_name)
                     # Backends start tasks to write messages
                     callback.start(loop)
-
-    def exchange_symbol_to_std_symbol(self, symbol: str) -> str:
-        try:
-            return self.exchange_symbol_mapping[symbol]
-        except KeyError:
-            raise UnsupportedSymbol(f'{symbol} is not supported on {self.id}')
-
-    def std_symbol_to_exchange_symbol(self, symbol: str) -> str:
-        try:
-            return self.normalized_symbol_mapping[symbol]
-        except KeyError:
-            raise UnsupportedSymbol(f'{symbol} is not supported on {self.id}')
