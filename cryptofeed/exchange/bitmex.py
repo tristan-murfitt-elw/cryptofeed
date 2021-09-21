@@ -63,17 +63,6 @@ class Bitmex(Feed):
 
         return ret, info
 
-    @classmethod
-    def _translate_index_symbol(cls, symbol: str, is_outbound: bool) -> str:
-        """
-        Override base method for translating index symbols because BitMEX indexes use the dot (.)
-        """
-        if is_outbound:
-            # Outbound (to exchange API), remove INDEX_PREFIX and add .
-            return f'{BITMEX_INDEX_SYMBOL}{symbol[len(INDEX_PREFIX):]}'
-        else:
-            return f'{INDEX_PREFIX}{symbol[len(BITMEX_INDEX_SYMBOL):]}'
-
     def __init__(self, sandbox=False, **kwargs):
         auth_api = 'wss://www.bitmex.com/realtime' if not sandbox else 'wss://testnet.bitmex.com/realtime'
         super().__init__(auth_api, **kwargs)

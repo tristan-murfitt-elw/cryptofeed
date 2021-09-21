@@ -66,17 +66,6 @@ class KrakenFutures(Feed):
         return ret, info
 
     @classmethod
-    def _translate_index_symbol(cls, symbol: str, is_outbound: bool) -> str:
-        """
-        Override base method for translating index symbols because BitMEX indexes use the dot (.)
-        """
-        if is_outbound:
-            # Outbound (to exchange API), remove INDEX_PREFIX and add .
-            return f'{INDEX_PRODUCT_PREFIX}{symbol[len(INDEX_PREFIX):]}'
-        else:
-            return f'{INDEX_PREFIX}{symbol[len(INDEX_PRODUCT_PREFIX):]}'
-
-    @classmethod
     def _is_index(cls, symbol: str):
         product_type = cls.info()['product_type'][symbol]
         return product_type == INDEX_PRODUCT_TYPE

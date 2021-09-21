@@ -46,11 +46,10 @@ class FTX(Feed):
             ret[normalized] = symbol
             info['tick_size'][normalized] = d['priceIncrement']
             
-            # Add index symbol
-            underlying = d['underlying']
-            if underlying is None:
+            # Add index symbol for non-spot markets
+            if d['underlying'] is None or d['type'] == 'spot':
                 continue
-            index_normalized = cls._translate_index_symbol(underlying, False)
+            index_normalized = cls._translate_index_symbol(d['underlying'], False)
             ret[index_normalized] = index_normalized
             info['index_to_derivative'][index_normalized] = symbol
             info['is_index'][index_normalized] = True
