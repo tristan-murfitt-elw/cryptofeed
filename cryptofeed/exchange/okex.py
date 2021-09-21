@@ -54,6 +54,7 @@ class OKEx(OKCoin):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.ws_defaults['compression'] = None
         self.address = 'wss://real.okex.com:8443/ws/v3'
 
     async def _liquidations(self, pairs: list):

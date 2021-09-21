@@ -48,6 +48,7 @@ class FTX(Feed):
 
     def __init__(self, **kwargs):
         super().__init__('wss://ftexchange.com/ws/', **kwargs)
+        self.ws_defaults['compression'] = None
 
     def __reset(self):
         self.l2_book = {}
