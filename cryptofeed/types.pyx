@@ -4,6 +4,8 @@ Copyright (C) 2017-2021  Bryant Moscon - bmoscon@gmail.com
 Please see the LICENSE file for the terms and conditions
 associated with this software.
 '''
+from decimal import Decimal
+
 from cryptofeed.defines import BID, ASK
 from order_book import OrderBook as _OrderBook
 
@@ -20,6 +22,9 @@ cdef class Trade:
     cdef readonly object raw  # can be dict or list
 
     def __init__(self, exchange, symbol, side, amount, price, timestamp, id=None, type=None, raw=None):
+        assert isinstance(price, Decimal)
+        assert isinstance(amount, Decimal)
+
         self.exchange = exchange
         self.symbol = symbol
         self.side = side
@@ -54,6 +59,10 @@ cdef class Ticker:
     cdef readonly object raw
 
     def __init__(self, exchange, symbol, bid, ask, timestamp, raw=None):
+        assert isinstance(bid, Decimal)
+        assert isinstance(ask, Decimal)
+        assert timestamp is None or isinstance(timestamp, float)
+
         self.exchange = exchange
         self.symbol = symbol
         self.bid = bid
@@ -88,6 +97,10 @@ cdef class Liquidation:
     cdef readonly dict raw
 
     def __init__(self, exchange, symbol, side, leaves_qty, price, id, status, timestamp, raw=None):
+        assert isinstance(leaves_qty, Decimal)
+        assert isinstance(price, Decimal)
+        assert timestamp is None or isinstance(timestamp, float)
+
         self.exchange = exchange
         self.symbol = symbol
         self.side = side
@@ -123,6 +136,11 @@ cdef class Funding:
     cdef readonly object raw
 
     def __init__(self, exchange, symbol, mark_price, rate, next_funding_time, timestamp, predicted_rate=None, raw=None):
+        assert mark_price is None or isinstance(mark_price, Decimal)
+        assert isinstance(rate, Decimal)
+        assert next_funding_time is None or isinstance(next_funding_time, float)
+        assert predicted_rate is None or isinstance(predicted_rate, Decimal)
+
         self.exchange = exchange
         self.symbol = symbol
         self.mark_price = mark_price
@@ -164,6 +182,14 @@ cdef class Candle:
     cdef readonly object raw  # dict or list
 
     def __init__(self, exchange, symbol, start, stop, interval, trades, open, close, high, low, volume, closed, timestamp, raw=None):
+        assert trades is None or isinstance(trades, int)
+        assert isinstance(open, Decimal)
+        assert isinstance(close, Decimal)
+        assert isinstance(high, Decimal)
+        assert isinstance(low, Decimal)
+        assert isinstance(volume, Decimal)
+        assert timestamp is None or isinstance(timestamp, float)
+
         self.exchange = exchange
         self.symbol = symbol
         self.start = start
@@ -193,9 +219,6 @@ cdef class Candle:
     def __hash__(self):
         return hash(self.__repr__())
 
-    def __hash__(self):
-        return hash(self.__repr__())
-
 
 cdef class Index:
     cdef readonly str exchange
@@ -205,6 +228,8 @@ cdef class Index:
     cdef readonly dict raw
 
     def __init__(self, exchange, symbol, price, timestamp, raw=None):
+        assert isinstance(price, Decimal)
+
         self.exchange = exchange
         self.symbol = symbol
         self.price = price
@@ -234,6 +259,9 @@ cdef class OpenInterest:
     cdef readonly dict raw
 
     def __init__(self, exchange, symbol, open_interest, timestamp, raw=None):
+        assert isinstance(open_interest, Decimal)
+        assert timestamp is None or isinstance(timestamp, float)
+
         self.exchange = exchange
         self.symbol = symbol
         self.open_interest = open_interest
@@ -279,18 +307,34 @@ cdef class OrderBook:
         self.checksum = None
         self.raw = None
 
-    cpdef dict to_dict(self, delta=False, as_type=None):
+    def _delta(self, as_type) -> dict:
+        return {
+            BID: [tuple([as_type(v) if isinstance(v, Decimal) else v for v in value]) for value in self.delta[BID]],
+            ASK: [tuple([as_type(v) if isinstance(v, Decimal) else v for v in value]) for value in self.delta[ASK]]
+        }
+
+    def to_dict(self, delta=False, as_type=None) -> dict:
+        assert self.sequence_number is None or isinstance(self.sequence_number, int)
+        assert self.checksum is None or isinstance(self.checksum, (str, int))
+        assert self.timestamp is None or isinstance(self.timestamp, Decimal)
+
+        def helper(x):
+            if isinstance(x, dict):
+                return {k: as_type(v) for k, v in x.items()}
+            else:
+                return as_type(x)
+
         if delta:
             if as_type is None:
                 return {'exchange': self.exchange, 'symbol': self.symbol, 'delta': self.delta, 'timestamp': self.timestamp}
-            return {'exchange': self.exchange, 'symbol': self.symbol, 'delta': {BID: [(as_type(price), as_type(size)) for price, size in self.delta[BID]], ASK: [(as_type(price), as_type(size)) for price, size in self.delta[ASK]]} if self.delta else None, 'timestamp': self.timestamp}
+            return {'exchange': self.exchange, 'symbol': self.symbol, 'delta': self._delta(as_type) if self.delta else None, 'timestamp': self.timestamp}
 
-        book_dict = self.book.to_dict()
         if as_type is None:
+            book_dict = self.book.to_dict()
             return {'exchange': self.exchange, 'symbol': self.symbol, 'book': book_dict, 'delta': self.delta, 'timestamp': self.timestamp}
-        ret = {BID: {as_type(price): as_type(size) for price, size in book_dict[BID].items()}, ASK: {as_type(price): as_type(size) for price, size in book_dict[ASK].items()}}
-        delta = {BID: [(as_type(price), as_type(size)) for price, size in self.delta[BID]], ASK: [(as_type(price), as_type(size)) for price, size in self.delta[ASK]]} if self.delta else None
-        return {'exchange': self.exchange, 'symbol': self.symbol, 'book': ret, 'delta': delta, 'timestamp': self.timestamp}
+
+        book_dict = self.book.to_dict(to_type=helper)
+        return {'exchange': self.exchange, 'symbol': self.symbol, 'book': book_dict, 'delta': self._delta(as_type)if self.delta else None, 'timestamp': self.timestamp}
 
     def __repr__(self):
         return f"exchange: {self.exchange} symbol: {self.symbol} book: {self.book} timestamp: {self.timestamp}"
@@ -316,6 +360,11 @@ cdef class OrderInfo:
     cdef readonly object raw  # Can be dict or list
 
     def __init__(self, exchange, symbol, id, side, status, type, price, amount, remaining, timestamp, raw=None):
+        assert isinstance(price, Decimal)
+        assert isinstance(amount, Decimal)
+        assert remaining is None or isinstance(remaining, Decimal)
+        assert timestamp is None or isinstance(timestamp, float)
+
         self.exchange = exchange
         self.symbol = symbol
         self.id = id
@@ -351,6 +400,9 @@ cdef class Balance:
     cdef readonly dict raw
 
     def __init__(self, exchange, currency, balance, reserved, raw=None):
+        assert isinstance(balance, Decimal)
+        assert reserved is None or isinstance(reserved, Decimal)
+
         self.exchange = exchange
         self.currency = currency
         self.balance = balance
@@ -383,6 +435,11 @@ cdef class L1Book:
     cdef readonly dict raw
 
     def __init__(self, exchange, symbol, bid_price, bid_size, ask_price, ask_size, timestamp, raw=None):
+        assert isinstance(bid_price, Decimal)
+        assert isinstance(bid_size, Decimal)
+        assert isinstance(ask_price, Decimal)
+        assert isinstance(ask_size, Decimal)
+
         self.exchange = exchange
         self.symbol = symbol
         self.bid_price = bid_price
@@ -417,6 +474,8 @@ cdef class Transaction:
     cdef readonly dict raw
 
     def __init__(self, exchange, currency, type, status, amount, timestamp, raw=None):
+        assert isinstance(amount, Decimal)
+
         self.exchange = exchange
         self.currency = currency
         self.type = type
@@ -455,6 +514,10 @@ cdef class Fill:
     cdef readonly object raw  # can be dict or list
 
     def __init__(self, exchange, symbol, side, amount, price, fee, id, order_id, type, liquidity, timestamp, raw=None):
+        assert isinstance(price, Decimal)
+        assert isinstance(amount, Decimal)
+        assert fee is None or isinstance(fee, Decimal)
+
         self.exchange = exchange
         self.symbol = symbol
         self.side = side

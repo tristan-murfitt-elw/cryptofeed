@@ -171,7 +171,7 @@ class FTX(Feed, FTXRestMixin):
                     if oi != self._open_interest_cache.get(pair, None):
                         o = OpenInterest(
                             self.id,
-                            pair,
+                            self.exchange_symbol_to_std_symbol(pair),
                             oi,
                             None,
                             raw=data
@@ -252,7 +252,7 @@ class FTX(Feed, FTXRestMixin):
                     BUY if trade['side'] == 'buy' else SELL,
                     Decimal(trade['size']),
                     Decimal(trade['price']),
-                    trade['id'],
+                    str(trade['id']),
                     FILLED,
                     float(self.timestamp_normalize(trade['time'])),
                     raw=trade
