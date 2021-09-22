@@ -17,7 +17,7 @@ from cryptofeed.config import Config
 from cryptofeed.connection import AsyncConnection, HTTPAsyncConn, HTTPSync, WSAsyncConn
 from cryptofeed.connection_handler import ConnectionHandler
 from cryptofeed.defines import (ASK, BID, BOOK_DELTA, CANDLES, FUNDING, FUTURES_INDEX, L2_BOOK, L3_BOOK, LIQUIDATIONS,
-                                OPEN_INTEREST, MARKET_INFO, ORDER_INFO, TICKER, TRADES, USER_FILLS)
+                                OPEN_INTEREST, MARKET_INFO, ORDER_INFO, TICKER, TRADES, USER_FILLS, MSGS_BETWEEN_CHECKSUM_VALIDATIONS)
 from cryptofeed.exceptions import BidAskOverlapping, UnsupportedDataFeed, UnsupportedSymbol
 from cryptofeed.standards import feed_to_exchange, is_authenticated_channel
 from cryptofeed.util.book import book_delta, depth
@@ -94,6 +94,8 @@ class Feed:
         self.previous_book = defaultdict(dict)
         self.origin = origin
         self.checksum_validation = checksum_validation
+        if checksum_validation:
+            self.msgs_since_checksum_validation = None
         self.ws_defaults = {'ping_interval': 10, 'ping_timeout': None, 'max_size': 2**23, 'max_queue': None, 'origin': self.origin}
         self.key_id = os.environ.get(f'CF_{self.id}_KEY_ID') or self.config[self.id.lower()].key_id
         self.key_secret = os.environ.get(f'CF_{self.id}_KEY_SECRET') or self.config[self.id.lower()].key_secret
@@ -398,3 +400,13 @@ class Feed:
             return self.normalized_symbol_mapping[symbol]
         except KeyError:
             raise UnsupportedSymbol(f'{symbol} is not supported on {self.id}')
+
+    def validate_checksum(self) -> bool:
+        """Check whether checksums should be validated"""
+        if self.checksum_validation:
+            if self.msgs_since_checksum_validation is None or self.msgs_since_checksum_validation >= MSGS_BETWEEN_CHECKSUM_VALIDATIONS:
+                self.msgs_since_checksum_validation = 0
+                return True
+            else:
+                self.msgs_since_checksum_validation += 1
+        return False
