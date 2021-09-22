@@ -196,7 +196,7 @@ class Kraken(Feed):
                         for _ in range(n_extras)
                     ])
 
-            if self.checksum_validation and 'c' in msg[0] and self.__calc_checksum(pair) != msg[0]['c']:
+            if self.validate_checksum() and 'c' in msg[0] and self.__calc_checksum(pair) != msg[0]['c']:
                 raise BadChecksum("Checksum validation on orderbook failed")
             await self.book_callback(self.l2_book[pair], L2_BOOK, pair, False, delta, timestamp, timestamp)
 

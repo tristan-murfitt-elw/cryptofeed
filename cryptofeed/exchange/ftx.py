@@ -276,7 +276,7 @@ class FTX(Feed):
                     Decimal(price): Decimal(amount) for price, amount in msg['data']['asks']
                 })
             }
-            if self.checksum_validation and self.__calc_checksum(pair) != check:
+            if self.validate_checksum() and self.__calc_checksum(pair) != check:
                 raise BadChecksum
             await self.book_callback(self.l2_book[pair], L2_BOOK, pair, True, None, float(msg['data']['time']), timestamp)
         else:
@@ -294,7 +294,7 @@ class FTX(Feed):
                     else:
                         delta[s].append((price, amount))
                         self.l2_book[pair][s][price] = amount
-            if self.checksum_validation and self.__calc_checksum(pair) != check:
+            if self.validate_checksum() and self.__calc_checksum(pair) != check:
                 raise BadChecksum
             await self.book_callback(self.l2_book[pair], L2_BOOK, pair, False, delta, float(msg['data']['time']), timestamp)
 
