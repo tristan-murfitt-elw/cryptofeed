@@ -40,7 +40,6 @@ class Bitmex(Feed):
         for entry in data:
             exchangeSymbol = entry['symbol']
             if exchangeSymbol.startswith(BITMEX_INDEX_SYMBOL):
-                # Need to replace the dot on the index symbol
                 exchangeSymbol = cls._translate_index_symbol(exchangeSymbol, False)
                 normalized = exchangeSymbol
                 info['index'][normalized] = True
