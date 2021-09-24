@@ -81,11 +81,7 @@ class BinanceDelivery(Binance):
         exchange_index_symbol = self._translate_index_symbol(msg['i'], False)
         pair = self.exchange_symbol_to_std_symbol(exchange_index_symbol)
         price = Decimal(msg['p'])
-
-        if 'E' in msg:
-            ts = timestamp_normalize(self.id, msg['E'])
-        else:
-            ts = timestamp
+        ts = timestamp_normalize(self.id, msg['E'])
         await self.callback(UNDERLYING_INDEX, feed=self.id,
                             symbol=pair,
                             timestamp=ts,

@@ -14,7 +14,7 @@ from yapic import json
 from cryptofeed.connection import AsyncConnection, HTTPPoll
 from cryptofeed.defines import BINANCE_FUTURES, OPEN_INTEREST, FUNDING, UNDERLYING_INDEX, INDEX_PREFIX
 from cryptofeed.exchange.binance import Binance
-from cryptofeed.standards import timestamp_normalize
+from cryptofeed.standards import feed_to_exchange, timestamp_normalize
 
 LOG = logging.getLogger('feedhandler')
 
@@ -136,6 +136,9 @@ class BinanceFutures(Binance):
                             receipt_timestamp=timestamp,
                             price=msg['i'])
 
+    def _subscribed_to_feed_and_symbol(self, feed: str, symbol: str) -> bool:
+        return symbol in self.subscription[feed_to_exchange(self.id, feed)]
+
     def connect(self) -> List[Tuple[AsyncConnection, Callable[[None], None], Callable[[str, float], None]]]:
         ret = []
         if self.address:
@@ -143,11 +146,10 @@ class BinanceFutures(Binance):
 
         for chan in set(self.subscription):
             if chan == 'open_interest':
-                addrs = []
-                for pair in self.subscription[chan]:
-                    if pair.startswith(INDEX_PREFIX):
-                        continue
-                    addrs.append(f"{self.rest_endpoint}/openInterest?symbol={pair}")
+                addrs = [
+                    f"{self.rest_endpoint}/openInterest?symbol={pair}" for pair in self.subscription[chan] 
+                    if not pair.startswith(INDEX_PREFIX)
+                ]
                 ret.append((HTTPPoll(addrs, self.id, delay=60.0, sleep=1.0), self.subscribe, self.message_handler, self.authenticate))
         return ret
 
@@ -176,7 +178,7 @@ class BinanceFutures(Binance):
         elif msg_type == 'forceOrder':
             await self._liquidations(msg, timestamp)
         elif msg_type == 'markPriceUpdate':
-            # This channel is used for both kinds of updates
+            # This channel is for both funding and index price updates.
             # Attempt to publish both (but only publish if we're subscribed to a symbol that supports the event)
             await self._funding_with_index_price(msg, timestamp)
         elif msg['e'] == 'kline':

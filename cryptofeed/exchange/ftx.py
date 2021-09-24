@@ -46,7 +46,8 @@ class FTX(Feed):
             ret[normalized] = symbol
             info['tick_size'][normalized] = d['priceIncrement']
             
-            # Add index symbol for non-spot markets
+            # Add index symbol for derivative (here, non-spot) markets
+            # The available indexes have to be determined from the list of symbols because FTX does not provide a dedicated endpoint for them
             if d['underlying'] is None or d['type'] == 'spot':
                 continue
             index_normalized = cls._translate_index_symbol(d['underlying'], False)
@@ -54,14 +55,6 @@ class FTX(Feed):
             info['index_to_derivative'][index_normalized] = symbol
             info['is_index'][index_normalized] = True
         return ret, info
-
-    @classmethod
-    def _index_to_derivative(cls, symbol: str):
-        """
-        Returns a derivative (e.g. future, perpetual) associated with the given index symbol,
-        or None if the given symbol is not an index symbol.
-        """
-        return cls.info()['index_to_derivative'].get(symbol, None)
 
     @classmethod
     def _is_index(cls, symbol: str):
@@ -74,6 +67,13 @@ class FTX(Feed):
         self.l2_book = {}
         self.funding = {}
         self.open_interest = {}
+
+    def _index_to_derivative(self, symbol: str):
+        """
+        Returns a derivative (e.g. future, perpetual) associated with the given index symbol,
+        or None if the given symbol is not an index symbol.
+        """
+        return self.info()['index_to_derivative'].get(symbol)
 
     async def generate_token(self, conn: AsyncConnection):
         ts = int(time() * 1000)
@@ -104,14 +104,10 @@ class FTX(Feed):
                 continue
             if chan == feed_to_exchange(self.id, UNDERLYING_INDEX):
                 # Construct a list of index symbols
-                index_symbols = []
-                for s in symbols:
-                    if self._is_index(s):
-                        index_symbols.append(s)
-                
+                index_symbols = [s for s in symbols if self._is_index(s)]
                 if index_symbols:
                     # Create background task to fetch index prices
-                    asyncio.create_task(self._index_price(symbols))
+                    asyncio.create_task(self._subscribe_index_prices(symbols))
                 continue
             if is_authenticated_channel(normalize_channel(self.id, chan)):
                 await conn.write(json.dumps(
@@ -365,7 +361,7 @@ class FTX(Feed):
                             timestamp=float(timestamp_normalize(self.id, fill['time'])),
                             receipt_timestamp=timestamp)
 
-    async def _index_price(self, pairs: list):
+    async def _subscribe_index_prices(self, pairs: list):
         # Continously poll list of tickers from the REST API to get most recent index price
         last_update = {}
 
@@ -375,8 +371,13 @@ class FTX(Feed):
                 if not derivative:
                     continue
                 end_point = f"{self.api}/futures/{derivative}"
-                data = await self.http_conn.read(end_point)
-                data = json.loads(data, parse_float=Decimal)
+                try:
+                    data = await self.http_conn.read(end_point)
+                    data = json.loads(data, parse_float=Decimal)
+                except (aiohttp.ClientError, json.JsonDecodeError) as e:
+                    LOG.error(f"FTX: Received an exception when polling REST API for index prices: {e}")
+                    await asyncio.sleep(INDEX_PRICE_POLL_SLEEP_SECONDS)
+                    continue
                 timestamp = time()
                 future = data['result']
 

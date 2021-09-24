@@ -24,7 +24,7 @@ from cryptofeed.standards import feed_to_exchange, timestamp_normalize
 
 
 LOG = logging.getLogger('feedhandler')
-BITMEX_INDEX_SYMBOL = '.'
+BITMEX_INDEX_PREFIX = '.'
 
 
 class Bitmex(Feed):
@@ -39,7 +39,7 @@ class Bitmex(Feed):
 
         for entry in data:
             exchangeSymbol = entry['symbol']
-            if exchangeSymbol.startswith(BITMEX_INDEX_SYMBOL):
+            if exchangeSymbol.startswith(BITMEX_INDEX_PREFIX):
                 exchangeSymbol = cls._translate_index_symbol(exchangeSymbol, False)
                 normalized = exchangeSymbol
                 info['index'][normalized] = True
@@ -93,7 +93,7 @@ class Bitmex(Feed):
         """
         for data in msg['data']:
             ts = timestamp_normalize(self.id, data['timestamp'])
-            if data['symbol'].startswith(BITMEX_INDEX_SYMBOL):
+            if data['symbol'].startswith(BITMEX_INDEX_PREFIX):
                 symbol = self.exchange_symbol_to_std_symbol(self._translate_index_symbol(data['symbol'], False))
                 await self.callback(UNDERLYING_INDEX, feed=self.id,
                                     symbol=symbol,

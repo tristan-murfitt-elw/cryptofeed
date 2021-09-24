@@ -57,9 +57,6 @@ class Binance(Feed):
             raise ValueError(f"Candle interval must be one of {self.valid_candle_intervals}")
         self.address = self._address()
         self._reset()
-        
-    def _subscribed_to_feed_and_symbol(self, feed: str, symbol: str) -> bool:
-        return symbol in self.subscription[feed_to_exchange(self.id, feed)]
     
     def _address(self) -> Union[str, Dict]:
         """
