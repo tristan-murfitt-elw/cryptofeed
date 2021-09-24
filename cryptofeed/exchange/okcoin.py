@@ -208,7 +208,7 @@ class OKCoin(Feed):
                     })
                 }
 
-                if self.checksum_validation and self.__calc_checksum(pair) != (update['checksum'] & 0xFFFFFFFF):
+                if self.validate_checksum() and self.__calc_checksum(pair) != (update['checksum'] & 0xFFFFFFFF):
                     raise BadChecksum
                 await self.book_callback(self.l2_book[pair], L2_BOOK, pair, True, None, timestamp_normalize(self.id, update['timestamp']), timestamp)
         else:
@@ -228,7 +228,7 @@ class OKCoin(Feed):
                         else:
                             delta[s].append((price, amount))
                             self.l2_book[pair][s][price] = amount
-                if self.checksum_validation and self.__calc_checksum(pair) != (update['checksum'] & 0xFFFFFFFF):
+                if self.validate_checksum() and self.__calc_checksum(pair) != (update['checksum'] & 0xFFFFFFFF):
                     raise BadChecksum
                 await self.book_callback(self.l2_book[pair], L2_BOOK, pair, False, delta, timestamp_normalize(self.id, update['timestamp']), timestamp)
 

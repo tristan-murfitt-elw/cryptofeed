@@ -65,6 +65,7 @@ class Bitmex(Feed):
     def __init__(self, sandbox=False, **kwargs):
         auth_api = 'wss://www.bitmex.com/realtime' if not sandbox else 'wss://testnet.bitmex.com/realtime'
         super().__init__(auth_api, **kwargs)
+        self.ws_defaults['compression'] = None
         self._reset()
 
     def _reset(self):

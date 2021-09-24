@@ -28,6 +28,7 @@ class BinanceDelivery(Binance):
         self.ws_endpoint = 'wss://dstream.binance.com'
         self.rest_endpoint = 'https://dapi.binance.com/dapi/v1'
         self.address = self._address()
+        self.ws_defaults['compression'] = None
 
     @classmethod
     def _parse_symbol_data(cls, data: List, symbol_separator: str) -> Tuple[Dict, Dict]:

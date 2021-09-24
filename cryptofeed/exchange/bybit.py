@@ -43,6 +43,7 @@ class Bybit(Feed):
 
     def __init__(self, **kwargs):
         super().__init__({'USD': 'wss://stream.bybit.com/realtime', 'USDT': 'wss://stream.bybit.com/realtime_public'}, **kwargs)
+        self.ws_defaults['compression'] = None
 
     def __reset(self, quote=None):
         if quote is None:
