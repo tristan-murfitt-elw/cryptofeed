@@ -108,7 +108,7 @@ class FTX(Feed):
                 index_symbols = [s for s in symbols if self._is_index(s)]
                 if index_symbols:
                     # Create background task to fetch index prices
-                    asyncio.create_task(self._subscribe_index_prices(symbols))
+                    asyncio.create_task(self._subscribe_index_prices(symbols, conn))
                 continue
             if is_authenticated_channel(normalize_channel(self.id, chan)):
                 await conn.write(json.dumps(
@@ -362,36 +362,36 @@ class FTX(Feed):
                             timestamp=float(timestamp_normalize(self.id, fill['time'])),
                             receipt_timestamp=timestamp)
 
-    async def _subscribe_index_prices(self, pairs: list):
+    async def _subscribe_index_prices(self, pairs: list, conn: AsyncConnection):
         # Continously poll list of tickers from the REST API to get most recent index price
         last_update = {}
 
-        while True:
+        while conn.is_open:
             for index_name in pairs:
                 derivative = self._index_to_derivative(index_name)
                 if not derivative:
                     continue
                 end_point = f"{self.api}/futures/{derivative}"
+                req_time = time()
                 try:
                     data = await self.http_conn.read(end_point)
-                    data = json.loads(data, parse_float=Decimal)
+                    data = json.loads(data, parse_float=Decimal)['result']
                 except (aiohttp.ClientError, json.JsonDecodeError) as e:
-                    LOG.error(f"FTX: Received an exception when polling REST API for index prices: {e}")
-                    await asyncio.sleep(INDEX_PRICE_POLL_SLEEP_SECONDS)
+                    LOG.error(f"FTX: Received an exception when polling REST API for index prices: {end_point} err:{e}")
                     continue
-                timestamp = time()
-                future = data['result']
+                resp_time = time()
+                exchange_timestamp = resp_time - (resp_time - req_time)/2  # best effort = mid between send and receive
 
-                if future == last_update.get(future['name']):
+                if data == last_update.get(data['name']):
                     continue
                 await self.callback(UNDERLYING_INDEX,
-                                            feed=self.id,
-                                            symbol=self.exchange_symbol_to_std_symbol(index_name),
-                                            timestamp=timestamp,
-                                            receipt_timestamp=timestamp,
-                                            price=Decimal(future['index'])
-                                            )
-                last_update[future['name']] = future
+                                    feed=self.id,
+                                    symbol=self.exchange_symbol_to_std_symbol(index_name),
+                                    timestamp=exchange_timestamp,
+                                    receipt_timestamp=resp_time,
+                                    price=Decimal(data['index'])
+                                    )
+                last_update[data['name']] = data
             await asyncio.sleep(INDEX_PRICE_POLL_SLEEP_SECONDS)
 
     async def message_handler(self, msg: str, conn, timestamp: float):

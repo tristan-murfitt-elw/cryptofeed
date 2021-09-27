@@ -94,7 +94,7 @@ class KrakenFutures(Feed):
 
                 if index_symbols:
                     # Create background task to fetch index prices
-                    asyncio.create_task(self._subscribe_index_prices(self.subscription[chan]))
+                    asyncio.create_task(self._subscribe_index_prices(self.subscription[chan], conn))
             else:
                 await conn.write(json.dumps(
                     {
@@ -255,21 +255,21 @@ class KrakenFutures(Feed):
                             receipt_timestamp=timestamp
                             )
 
-    async def _subscribe_index_prices(self, pairs: list):
+    async def _subscribe_index_prices(self, pairs: list, conn: AsyncConnection):
         # Continously poll list of tickers from the REST API to get most recent index price
         last_update = {}
 
-        while True:
+        while conn.is_open:
             # Fetch all tickers, then check which ones we're subscribed to and publish updates for them
             end_point = f"{self.api}/v3/tickers"
             try:
                 data = await self.http_conn.read(end_point)
                 data = json.loads(data, parse_float=Decimal)
             except (aiohttp.ClientError, json.JsonDecodeError) as e:
-                LOG.error(f"KrakenFutures: Received an exception when polling REST API for index prices: {e}")
+                LOG.error(f"KrakenFutures: Received an exception when polling REST API for index prices: {end_point}: {e}")
                 await asyncio.sleep(INDEX_PRICE_POLL_SLEEP_SECONDS)
                 continue
-            timestamp = time.time()
+            resp_time = time.time()
             for ticker in data['tickers']:
                 if ticker['symbol'] not in pairs:
                     # Not subscribed to this pair, skip.
@@ -285,12 +285,12 @@ class KrakenFutures(Feed):
                     continue
 
                 await self.callback(UNDERLYING_INDEX,
-                                            feed=self.id,
-                                            symbol=std_symbol,
-                                            timestamp=ticker['lastTime'].timestamp(),
-                                            receipt_timestamp=timestamp,
-                                            price=Decimal(ticker['last'])
-                                            )
+                                    feed=self.id,
+                                    symbol=std_symbol,
+                                    timestamp=ticker['lastTime'].timestamp(),
+                                    receipt_timestamp=resp_time,
+                                    price=Decimal(ticker['last'])
+                                    )
                 last_update[ticker['symbol']] = ticker
             await asyncio.sleep(INDEX_PRICE_POLL_SLEEP_SECONDS)
 
