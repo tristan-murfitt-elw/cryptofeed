@@ -73,10 +73,10 @@ class OKEx(OKCoin):
         self.ws_defaults['compression'] = None
         self.address = 'wss://real.okex.com:8443/ws/v3'
 
-    async def _liquidations(self, pairs: list):
+    async def _liquidations(self, pairs: list, conn: AsyncConnection):
         last_update = {}
 
-        while True:
+        while conn.is_open:
             for pair in pairs:
                 if 'SWAP' in pair:
                     instrument_type = 'swap'
@@ -112,5 +112,5 @@ class OKEx(OKCoin):
 
     async def subscribe(self, conn: AsyncConnection):
         if LIQUIDATIONS in self.subscription:
-            asyncio.create_task(self._liquidations(self.subscription[LIQUIDATIONS]))
+            asyncio.create_task(self._liquidations(self.subscription[LIQUIDATIONS], conn))
         return await super().subscribe(conn)

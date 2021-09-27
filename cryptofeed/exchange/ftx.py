@@ -98,10 +98,10 @@ class FTX(Feed):
         for chan in self.subscription:
             symbols = self.subscription[chan]
             if chan == FUNDING:
-                asyncio.create_task(self._funding(symbols))  # TODO: use HTTPAsyncConn
+                asyncio.create_task(self._funding(symbols, conn))  # TODO: use HTTPAsyncConn
                 continue
             if chan == OPEN_INTEREST:
-                asyncio.create_task(self._open_interest(symbols))  # TODO: use HTTPAsyncConn
+                asyncio.create_task(self._open_interest(symbols, conn))  # TODO: use HTTPAsyncConn
                 continue
             if chan == feed_to_exchange(self.id, UNDERLYING_INDEX):
                 # Construct a list of index symbols
@@ -147,7 +147,7 @@ class FTX(Feed):
         computed = ":".join(combined).encode()
         return zlib.crc32(computed)
 
-    async def _open_interest(self, pairs: Iterable):
+    async def _open_interest(self, pairs: Iterable, conn: AsyncConnection):
         """
             {
               "success": true,
@@ -165,7 +165,7 @@ class FTX(Feed):
 
         rate_limiter = 1  # don't fetch too many pairs too fast
         async with aiohttp.ClientSession() as session:
-            while True:
+            while conn.is_open:
                 for pair in pairs:
                     # OI only for perp and futures, so check for / in pair name indicating spot
                     if '/' in pair:
@@ -189,7 +189,7 @@ class FTX(Feed):
                 wait_time = 60
                 await asyncio.sleep(wait_time)
 
-    async def _funding(self, pairs: Iterable):
+    async def _funding(self, pairs: Iterable, conn: AsyncConnection):
         """
             {
               "success": true,
@@ -207,7 +207,7 @@ class FTX(Feed):
         # funding rates do not change frequently
         wait_time = 60
         async with aiohttp.ClientSession() as session:
-            while True:
+            while conn.is_open:
                 for pair in pairs:
                     if '-PERP' not in pair:
                         continue
