@@ -51,6 +51,10 @@ class FTX(Feed):
             if d['underlying'] is None or d['type'] == 'spot':
                 continue
             index_normalized = cls._translate_index_symbol(d['underlying'], False)
+            if index_normalized in info['is_index'] and symbol[-4:] != 'PERP':
+                # Do not overwrite perpetual derivatives for an index
+                # We prefer to pair an index with a perpetual because they do not expire
+                continue
             ret[index_normalized] = index_normalized
             info['index_to_derivative'][index_normalized] = symbol
             info['is_index'][index_normalized] = True
