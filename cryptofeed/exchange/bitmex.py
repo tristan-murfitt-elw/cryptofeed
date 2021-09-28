@@ -184,8 +184,8 @@ class Bitmex(Feed):
             symbol = self.exchange_symbol_to_std_symbol(data['symbol'])
             extra_fields = {
                 'bbo': self.get_book_bbo(symbol),
-                'best_bid_size': Decimal(data.get('bidSize', 0)),
-                'best_ask_size': Decimal(data.get('askSize', 0)),
+                'best_bid_size': Decimal(data.get('bidSize') or 0),  # nullable
+                'best_ask_size': Decimal(data.get('askSize') or 0),  # nullable
             }
             await self.callback(TICKER, feed=self.id,
                                 symbol=symbol,
