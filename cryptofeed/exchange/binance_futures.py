@@ -114,7 +114,6 @@ class BinanceFutures(Binance):
         """
         symbol = self.exchange_symbol_to_std_symbol(msg['s'])
         exchange_index_symbol = self._translate_index_symbol(msg['s'], False)
-        index_symbol = self.exchange_symbol_to_std_symbol(exchange_index_symbol)
         ts = timestamp_normalize(self.id, msg['E'])
 
         if self._subscribed_to_feed_and_symbol(FUNDING, msg['s']):
@@ -130,6 +129,7 @@ class BinanceFutures(Binance):
                                 )
 
         if self._subscribed_to_feed_and_symbol(UNDERLYING_INDEX, exchange_index_symbol):
+            index_symbol = self.exchange_symbol_to_std_symbol(exchange_index_symbol)
             # Subscribed to the index symbol and UNDERLYING_INDEX. Send an update.
             await self.callback(UNDERLYING_INDEX, feed=self.id,
                             symbol=index_symbol,
