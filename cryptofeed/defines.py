@@ -55,7 +55,7 @@ TICKER = 'ticker'
 FUNDING = 'funding'
 OPEN_INTEREST = 'open_interest'
 LIQUIDATIONS = 'liquidations'
-FUTURES_INDEX = 'futures_index'
+UNDERLYING_INDEX = 'underlying_index'
 UNSUPPORTED = 'unsupported'
 MARKET_INFO = 'market_info'
 CANDLES = 'candles'
@@ -93,6 +93,8 @@ DELETE = 'DELETE'
 PUT = 'PUT'
 POST = 'POST'
 
+INDEX_PREFIX = 'INDEX_'
+INDEX_PRICE_POLL_SLEEP_SECONDS = 5
 MSGS_BETWEEN_CHECKSUM_VALIDATIONS = 100
 
 

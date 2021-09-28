@@ -21,10 +21,10 @@ from yapic import json
 from cryptofeed.connection import AsyncConnection
 from cryptofeed.defines import BID, ASK, BUY, USER_FILLS
 from cryptofeed.defines import FTX as FTX_id
-from cryptofeed.defines import FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, SELL, TICKER, TRADES, FILLED
+from cryptofeed.defines import FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, UNDERLYING_INDEX, SELL, TICKER, TRADES, FILLED, INDEX_PRICE_POLL_SLEEP_SECONDS
 from cryptofeed.exceptions import BadChecksum
 from cryptofeed.feed import Feed
-from cryptofeed.standards import is_authenticated_channel, normalize_channel, timestamp_normalize
+from cryptofeed.standards import feed_to_exchange, is_authenticated_channel, normalize_channel, timestamp_normalize
 
 
 LOG = logging.getLogger('feedhandler')
@@ -32,6 +32,7 @@ LOG = logging.getLogger('feedhandler')
 
 class FTX(Feed):
     id = FTX_id
+    api = "https://ftx.com/api"
     symbol_endpoint = "https://ftx.com/api/markets"
 
     @classmethod
@@ -44,7 +45,24 @@ class FTX(Feed):
             symbol = d['name']
             ret[normalized] = symbol
             info['tick_size'][normalized] = d['priceIncrement']
+            
+            # Add index symbol for derivative (here, non-spot) markets
+            # The available indexes have to be determined from the list of symbols because FTX does not provide a dedicated endpoint for them
+            if d['underlying'] is None or d['type'] == 'spot':
+                continue
+            index_normalized = cls._translate_index_symbol(d['underlying'], False)
+            if index_normalized in info['is_index'] and symbol[-4:] != 'PERP':
+                # Do not overwrite perpetual derivatives for an index
+                # We prefer to pair an index with a perpetual because they do not expire
+                continue
+            ret[index_normalized] = index_normalized
+            info['index_to_derivative'][index_normalized] = symbol
+            info['is_index'][index_normalized] = True
         return ret, info
+
+    @classmethod
+    def _is_index(cls, symbol: str):
+        return cls.info()['is_index'].get(symbol, False)
 
     def __init__(self, **kwargs):
         super().__init__('wss://ftexchange.com/ws/', **kwargs)
@@ -54,6 +72,13 @@ class FTX(Feed):
         self.l2_book = {}
         self.funding = {}
         self.open_interest = {}
+
+    def _index_to_derivative(self, symbol: str):
+        """
+        Returns a derivative (e.g. future, perpetual) associated with the given index symbol,
+        or None if the given symbol is not an index symbol.
+        """
+        return self.info()['index_to_derivative'].get(symbol)
 
     async def generate_token(self, conn: AsyncConnection):
         ts = int(time() * 1000)
@@ -77,10 +102,17 @@ class FTX(Feed):
         for chan in self.subscription:
             symbols = self.subscription[chan]
             if chan == FUNDING:
-                asyncio.create_task(self._funding(symbols))  # TODO: use HTTPAsyncConn
+                asyncio.create_task(self._funding(symbols, conn))  # TODO: use HTTPAsyncConn
                 continue
             if chan == OPEN_INTEREST:
-                asyncio.create_task(self._open_interest(symbols))  # TODO: use HTTPAsyncConn
+                asyncio.create_task(self._open_interest(symbols, conn))  # TODO: use HTTPAsyncConn
+                continue
+            if chan == feed_to_exchange(self.id, UNDERLYING_INDEX):
+                # Construct a list of index symbols
+                index_symbols = [s for s in symbols if self._is_index(s)]
+                if index_symbols:
+                    # Create background task to fetch index prices
+                    asyncio.create_task(self._subscribe_index_prices(symbols, conn))
                 continue
             if is_authenticated_channel(normalize_channel(self.id, chan)):
                 await conn.write(json.dumps(
@@ -91,13 +123,14 @@ class FTX(Feed):
                 ))
                 continue
             for pair in symbols:
-                await conn.write(json.dumps(
-                    {
-                        "channel": chan,
-                        "market": pair,
-                        "op": "subscribe"
-                    }
-                ))
+                if not self._is_index(pair):
+                    await conn.write(json.dumps(
+                        {
+                            "channel": chan,
+                            "market": pair,
+                            "op": "subscribe"
+                        }
+                    ))
 
     def __calc_checksum(self, pair):
         bid_it = reversed(self.l2_book[pair][BID])
@@ -118,7 +151,7 @@ class FTX(Feed):
         computed = ":".join(combined).encode()
         return zlib.crc32(computed)
 
-    async def _open_interest(self, pairs: Iterable):
+    async def _open_interest(self, pairs: Iterable, conn: AsyncConnection):
         """
             {
               "success": true,
@@ -136,7 +169,7 @@ class FTX(Feed):
 
         rate_limiter = 1  # don't fetch too many pairs too fast
         async with aiohttp.ClientSession() as session:
-            while True:
+            while conn.is_open:
                 for pair in pairs:
                     # OI only for perp and futures, so check for / in pair name indicating spot
                     if '/' in pair:
@@ -160,7 +193,7 @@ class FTX(Feed):
                 wait_time = 60
                 await asyncio.sleep(wait_time)
 
-    async def _funding(self, pairs: Iterable):
+    async def _funding(self, pairs: Iterable, conn: AsyncConnection):
         """
             {
               "success": true,
@@ -178,7 +211,7 @@ class FTX(Feed):
         # funding rates do not change frequently
         wait_time = 60
         async with aiohttp.ClientSession() as session:
-            while True:
+            while conn.is_open:
                 for pair in pairs:
                     if '-PERP' not in pair:
                         continue
@@ -332,6 +365,38 @@ class FTX(Feed):
                             trade_id=fill['tradeId'],
                             timestamp=float(timestamp_normalize(self.id, fill['time'])),
                             receipt_timestamp=timestamp)
+
+    async def _subscribe_index_prices(self, pairs: list, conn: AsyncConnection):
+        # Continously poll list of tickers from the REST API to get most recent index price
+        last_update = {}
+
+        while conn.is_open:
+            for index_name in pairs:
+                derivative = self._index_to_derivative(index_name)
+                if not derivative:
+                    continue
+                end_point = f"{self.api}/futures/{derivative}"
+                req_time = time()
+                try:
+                    data = await self.http_conn.read(end_point)
+                    data = json.loads(data, parse_float=Decimal)['result']
+                except (aiohttp.ClientError, json.JsonDecodeError) as e:
+                    LOG.error(f"FTX: Received an exception when polling REST API for index prices: {end_point} err:{e}")
+                    continue
+                resp_time = time()
+                exchange_timestamp = resp_time - (resp_time - req_time)/2  # best effort = mid between send and receive
+
+                if data == last_update.get(data['name']):
+                    continue
+                await self.callback(UNDERLYING_INDEX,
+                                    feed=self.id,
+                                    symbol=self.exchange_symbol_to_std_symbol(index_name),
+                                    timestamp=exchange_timestamp,
+                                    receipt_timestamp=resp_time,
+                                    price=Decimal(data['index'])
+                                    )
+                last_update[data['name']] = data
+            await asyncio.sleep(INDEX_PRICE_POLL_SLEEP_SECONDS)
 
     async def message_handler(self, msg: str, conn, timestamp: float):
         msg = json.loads(msg, parse_float=Decimal)

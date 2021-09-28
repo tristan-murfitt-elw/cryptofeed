@@ -18,18 +18,19 @@ from decimal import Decimal
 from sortedcontainers import SortedDict as sd
 from yapic import json
 
-from cryptofeed.defines import BID, ASK, BITMEX, BUY, FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, SELL, TICKER, TRADES, UNFILLED
+from cryptofeed.defines import BID, ASK, BITMEX, BUY, FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, SELL, TICKER, TRADES, UNDERLYING_INDEX, UNFILLED, INDEX_PREFIX
 from cryptofeed.feed import Feed
-from cryptofeed.standards import timestamp_normalize
+from cryptofeed.standards import feed_to_exchange, timestamp_normalize
 
 
 LOG = logging.getLogger('feedhandler')
+BITMEX_INDEX_PREFIX = '.'
 
 
 class Bitmex(Feed):
     id = BITMEX
     api = 'https://www.bitmex.com/api/v1/'
-    symbol_endpoint = "https://www.bitmex.com/api/v1/instrument/active"
+    symbol_endpoint = "https://www.bitmex.com/api/v1/instrument/activeAndIndices"
 
     @classmethod
     def _parse_symbol_data(cls, data: dict, symbol_separator: str) -> Tuple[Dict, Dict]:
@@ -37,16 +38,23 @@ class Bitmex(Feed):
         info = defaultdict(dict)
 
         for entry in data:
-            components = []
-            components.append(entry['rootSymbol'])
-            components.append(entry['quoteCurrency'])
+            exchangeSymbol = entry['symbol']
+            if exchangeSymbol.startswith(BITMEX_INDEX_PREFIX):
+                exchangeSymbol = cls._translate_index_symbol(exchangeSymbol, False)
+                normalized = exchangeSymbol
+                info['index'][normalized] = True
+            else:
+                components = []
+                components.append(entry['rootSymbol'])
+                components.append(entry['quoteCurrency'])
 
-            if entry['expiry']:
-                components.append(entry['symbol'][-3:])
+                if entry['expiry']:
+                    components.append(exchangeSymbol[-3:])
 
-            normalized = symbol_separator.join(components)
-            normalized = normalized.replace("XBT", "BTC")
-            ret[normalized] = entry['symbol']
+                normalized = symbol_separator.join(components)
+                normalized = normalized.replace("XBT", "BTC")
+            
+            ret[normalized] = exchangeSymbol
             info['tick_size'][normalized] = entry['tickSize']
 
             if entry['expiry']:
@@ -86,14 +94,23 @@ class Bitmex(Feed):
         """
         for data in msg['data']:
             ts = timestamp_normalize(self.id, data['timestamp'])
-            await self.callback(TRADES, feed=self.id,
-                                symbol=self.exchange_symbol_to_std_symbol(data['symbol']),
-                                side=BUY if data['side'] == 'Buy' else SELL,
-                                amount=Decimal(data['size']),
-                                price=Decimal(data['price']),
-                                order_id=data['trdMatchID'],
-                                timestamp=ts,
-                                receipt_timestamp=timestamp)
+            if data['symbol'].startswith(BITMEX_INDEX_PREFIX):
+                symbol = self.exchange_symbol_to_std_symbol(self._translate_index_symbol(data['symbol'], False))
+                await self.callback(UNDERLYING_INDEX, feed=self.id,
+                                    symbol=symbol,
+                                    timestamp=ts,
+                                    receipt_timestamp=timestamp,
+                                    price=Decimal(data['price']))
+            else:
+                symbol = self.exchange_symbol_to_std_symbol(data['symbol'])
+                await self.callback(TRADES, feed=self.id,
+                                    symbol=symbol,
+                                    side=BUY if data['side'] == 'Buy' else SELL,
+                                    amount=Decimal(data['size']),
+                                    price=Decimal(data['price']),
+                                    order_id=data['trdMatchID'],
+                                    timestamp=ts,
+                                    receipt_timestamp=timestamp)
 
     async def _book(self, msg: dict, timestamp: float):
         """
@@ -526,6 +543,12 @@ class Bitmex(Feed):
         chans = []
         for chan in self.subscription:
             for pair in self.subscription[chan]:
+                if pair.startswith(INDEX_PREFIX):
+                    if chan != feed_to_exchange(self.id, UNDERLYING_INDEX):
+                        # For index symbols, skip every channel except the index channel
+                        continue
+                    pair = self._translate_index_symbol(pair, True)
+                
                 chans.append(f"{chan}:{pair}")
 
         for i in range(0, len(chans), 10):

@@ -14,7 +14,7 @@ from sortedcontainers import SortedDict as sd
 from yapic import json
 
 from cryptofeed.connection import AsyncConnection, WSAsyncConn
-from cryptofeed.defines import BID, ASK, BUY, BYBIT, L2_BOOK, SELL, TRADES, OPEN_INTEREST, FUTURES_INDEX
+from cryptofeed.defines import BID, ASK, BUY, BYBIT, L2_BOOK, SELL, TRADES, OPEN_INTEREST, UNDERLYING_INDEX
 from cryptofeed.feed import Feed
 from cryptofeed.standards import timestamp_normalize
 
@@ -192,9 +192,9 @@ class Bybit(Feed):
                                     receipt_timestamp=timestamp)
 
             if 'index_price_e4' in info:
-                await self.callback(FUTURES_INDEX, feed=self.id,
+                await self.callback(UNDERLYING_INDEX, feed=self.id,
                                     symbol=self.exchange_symbol_to_std_symbol(info['symbol']),
-                                    futures_index=Decimal(info['index_price_e4']) * Decimal(1e-4),
+                                    underlying_index=Decimal(info['index_price_e4']) * Decimal(1e-4),
                                     timestamp=ts,
                                     receipt_timestamp=timestamp)
 

@@ -7,14 +7,14 @@ associated with this software.
 from decimal import Decimal
 import logging
 import time
-from typing import List, Tuple, Callable, Dict
+from typing import List, Tuple, Callable, Dict, List
 
 from yapic import json
 
 from cryptofeed.connection import AsyncConnection, HTTPPoll
-from cryptofeed.defines import BINANCE_FUTURES, OPEN_INTEREST
+from cryptofeed.defines import BINANCE_FUTURES, OPEN_INTEREST, FUNDING, UNDERLYING_INDEX, INDEX_PREFIX
 from cryptofeed.exchange.binance import Binance
-from cryptofeed.standards import timestamp_normalize
+from cryptofeed.standards import feed_to_exchange, timestamp_normalize
 
 LOG = logging.getLogger('feedhandler')
 
@@ -22,18 +22,37 @@ LOG = logging.getLogger('feedhandler')
 class BinanceFutures(Binance):
     id = BINANCE_FUTURES
     valid_depths = [5, 10, 20, 50, 100, 500, 1000]
-    symbol_endpoint = 'https://fapi.binance.com/fapi/v1/exchangeInfo'
+    symbol_endpoint = ['https://fapi.binance.com/fapi/v1/exchangeInfo', 'https://fapi.binance.com/fapi/v1/premiumIndex']
 
     @classmethod
-    def _parse_symbol_data(cls, data: dict, symbol_separator: str) -> Tuple[Dict, Dict]:
-        base, info = super()._parse_symbol_data(data, symbol_separator)
-        add = {}
-        for symbol, orig in base.items():
-            if "_" in orig:
-                continue
-            add[f"{symbol}{symbol_separator}PINDEX"] = f"p{orig}"
-        base.update(add)
-        return base, info
+    def _parse_symbol_data(cls, data: List, symbol_separator: str) -> Tuple[Dict, Dict]:
+        ret = {}
+        for symbols_result in data:
+            if cls._is_index_symbols_result(symbols_result):
+                for index in symbols_result:
+                    # Index symbol
+                    exchange_symbol = index['symbol'].split('_')[0] # Removes future dates, e.g. BTCUSDT_210924
+                    exchange_symbol = cls._translate_index_symbol(exchange_symbol, False)
+                    ret[exchange_symbol] = exchange_symbol
+            else:
+                # Regular symbols
+                base, info = super()._parse_symbol_data(symbols_result, symbol_separator)
+                add = {}
+                for symbol, orig in base.items():
+                    if "_" in orig:
+                        continue
+                    add[f"{symbol}{symbol_separator}PINDEX"] = f"p{orig}"
+                ret.update(add)
+                ret.update(base)
+        return ret, info
+
+    @classmethod
+    def _is_index_symbols_result(cls, symbols_result) -> bool:
+        """
+        Returns true if the entry is contains index results. In the Binance API, index data is returned as an array of dictionaries,
+        while regular symbols are returned as part of a dictionary of general market information.
+        """
+        return isinstance(symbols_result, list)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -80,6 +99,47 @@ class BinanceFutures(Binance):
                                 )
             self.open_interest[pair] = oi
 
+    async def _funding_with_index_price(self, msg: dict, timestamp: float):
+        """
+        {
+            "e": "markPriceUpdate",     // Event type
+            "E": 1562305380000,         // Event time
+            "s": "BTCUSDT",             // Symbol
+            "p": "11794.15000000",      // Mark price
+            "i": "11784.62659091",      // Index price
+            "P": "11784.25641265",      // Estimated Settle Price, only useful in the last hour before the settlement starts
+            "r": "0.00038167",          // Funding rate
+            "T": 1562306400000          // Next funding time
+        }
+        """
+        symbol = self.exchange_symbol_to_std_symbol(msg['s'])
+        exchange_index_symbol = self._translate_index_symbol(msg['s'], False)
+        index_symbol = self.exchange_symbol_to_std_symbol(exchange_index_symbol)
+        ts = timestamp_normalize(self.id, msg['E'])
+
+        if self._subscribed_to_feed_and_symbol(FUNDING, msg['s']):
+            # Subscribed to the non-index symbol and FUNDING. Send an update.
+            await self.callback(FUNDING,
+                                feed=self.id,
+                                symbol=symbol,
+                                timestamp=ts,
+                                receipt_timestamp=timestamp,
+                                mark_price=msg['p'],
+                                rate=msg['r'],
+                                next_funding_time=timestamp_normalize(self.id, msg['T']),
+                                )
+
+        if self._subscribed_to_feed_and_symbol(UNDERLYING_INDEX, exchange_index_symbol):
+            # Subscribed to the index symbol and UNDERLYING_INDEX. Send an update.
+            await self.callback(UNDERLYING_INDEX, feed=self.id,
+                            symbol=index_symbol,
+                            timestamp=ts,
+                            receipt_timestamp=timestamp,
+                            price=msg['i'])
+
+    def _subscribed_to_feed_and_symbol(self, feed: str, symbol: str) -> bool:
+        return symbol in self.subscription[feed_to_exchange(self.id, feed)]
+
     def connect(self) -> List[Tuple[AsyncConnection, Callable[[None], None], Callable[[str, float], None]]]:
         ret = []
         if self.address:
@@ -87,7 +147,10 @@ class BinanceFutures(Binance):
 
         for chan in set(self.subscription):
             if chan == 'open_interest':
-                addrs = [f"{self.rest_endpoint}/openInterest?symbol={pair}" for pair in self.subscription[chan]]
+                addrs = [
+                    f"{self.rest_endpoint}/openInterest?symbol={pair}" for pair in self.subscription[chan] 
+                    if not pair.startswith(INDEX_PREFIX)
+                ]
                 ret.append((HTTPPoll(addrs, self.id, delay=60.0, sleep=1.0), self.subscribe, self.message_handler, self.authenticate))
         return ret
 
@@ -116,7 +179,9 @@ class BinanceFutures(Binance):
         elif msg_type == 'forceOrder':
             await self._liquidations(msg, timestamp)
         elif msg_type == 'markPriceUpdate':
-            await self._funding(msg, timestamp)
+            # This channel is for both funding and index price updates.
+            # Attempt to publish both (but only publish if we're subscribed to a symbol that supports the event)
+            await self._funding_with_index_price(msg, timestamp)
         elif msg['e'] == 'kline':
             await self._candle(msg, timestamp)
         else:

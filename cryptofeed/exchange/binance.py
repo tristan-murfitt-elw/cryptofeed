@@ -5,6 +5,7 @@ Please see the LICENSE file for the terms and conditions
 associated with this software.
 '''
 import logging
+import time
 from collections import defaultdict
 from decimal import Decimal
 from typing import Dict, Union, Tuple
@@ -13,9 +14,9 @@ from sortedcontainers import SortedDict as sd
 from yapic import json
 
 from cryptofeed.connection import AsyncConnection, HTTPPoll
-from cryptofeed.defines import BID, ASK, BINANCE, BUY, CANDLES, FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, SELL, TICKER, TRADES, FILLED, UNFILLED
+from cryptofeed.defines import BID, ASK, BINANCE, BUY, CANDLES, FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, UNDERLYING_INDEX, SELL, TICKER, TRADES, FILLED, UNFILLED, INDEX_PREFIX
 from cryptofeed.feed import Feed
-from cryptofeed.standards import timestamp_normalize, normalize_channel
+from cryptofeed.standards import feed_to_exchange, timestamp_normalize, normalize_channel
 
 
 LOG = logging.getLogger('feedhandler')
@@ -40,6 +41,7 @@ class Binance(Feed):
             split = len(symbol['baseAsset'])
             normalized = symbol['symbol'][:split] + symbol_separator + symbol['symbol'][split:]
             ret[normalized] = symbol['symbol']
+
             info['tick_size'][normalized] = symbol['filters'][0]['tickSize']
             if "contractType" in symbol:
                 info['contract_type'][normalized] = symbol['contractType']
@@ -55,7 +57,7 @@ class Binance(Feed):
             raise ValueError(f"Candle interval must be one of {self.valid_candle_intervals}")
         self.address = self._address()
         self._reset()
-
+    
     def _address(self) -> Union[str, Dict]:
         """
         Binance has a 200 pair/stream limit per connection, so we need to break the address
@@ -84,6 +86,11 @@ class Binance(Feed):
                     if normalized_chan != CANDLES:
                         raise ValueError("Premium Index Symbols only allowed on Candle data feed")
                 else:
+                    if pair.startswith(INDEX_PREFIX):
+                        # Remove index prefix from index symbols, and only sub for UNDERLYING_INDEX
+                        if chan != feed_to_exchange(self.id, UNDERLYING_INDEX):
+                            continue
+                        pair = self._translate_index_symbol(pair, True)
                     pair = pair.lower()
                 subs.append(f"{pair}@{stream}")
 
@@ -310,7 +317,7 @@ class Binance(Feed):
                             rate=msg['r'],
                             next_funding_time=timestamp_normalize(self.id, msg['T']),
                             )
-
+    
     async def _candle(self, msg: dict, timestamp: float):
         """
         {

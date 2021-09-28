@@ -36,9 +36,9 @@ class HuobiSwap(HuobiDM):
         Feed.__init__(self, 'wss://api.hbdm.com/swap-ws', **kwargs)
         self.funding_updates = {}
 
-    async def _funding(self, pairs):
+    async def _funding(self, pairs, conn: AsyncConnection):
         async with aiohttp.ClientSession() as session:
-            while True:
+            while conn.is_open:
                 for pair in pairs:
                     async with session.get(f'https://api.hbdm.com/swap-api/v1/swap_funding_rate?contract_code={pair}') as response:
                         data = await response.text()
@@ -64,6 +64,6 @@ class HuobiSwap(HuobiDM):
     async def subscribe(self, conn: AsyncConnection):
         if FUNDING in self.subscription:
             loop = asyncio.get_event_loop()
-            loop.create_task(self._funding(self.subscription[FUNDING]))
+            loop.create_task(self._funding(self.subscription[FUNDING], conn))
 
         await super().subscribe(conn)

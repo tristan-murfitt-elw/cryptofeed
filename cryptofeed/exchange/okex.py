@@ -14,7 +14,7 @@ from typing import Dict, Tuple
 from yapic import json
 
 from cryptofeed.connection import AsyncConnection
-from cryptofeed.defines import OKEX, LIQUIDATIONS, BUY, SELL, FILLED, UNFILLED
+from cryptofeed.defines import OKEX, LIQUIDATIONS, BUY, SELL, FILLED, UNFILLED, INDEX_PREFIX
 from cryptofeed.exchange.okcoin import OKCoin
 
 
@@ -27,7 +27,7 @@ class OKEx(OKCoin):
     """
     id = OKEX
     api = 'https://www.okex.com/api/'
-    symbol_endpoint = ['https://www.okex.com/api/spot/v3/instruments', 'https://www.okex.com/api/swap/v3/instruments', 'https://www.okex.com/api/futures/v3/instruments', 'https://www.okex.com/api/option/v3/instruments/BTC-USD', 'https://www.okex.com/api/option/v3/instruments/ETH-USD', 'https://www.okex.com/api/option/v3/instruments/EOS-USD']
+    symbol_endpoint = ['https://www.okex.com/api/spot/v3/instruments', 'https://www.okex.com/api/swap/v3/instruments', 'https://www.okex.com/api/futures/v3/instruments', 'https://www.okex.com/api/option/v3/instruments/BTC-USD', 'https://www.okex.com/api/option/v3/instruments/ETH-USD', 'https://www.okex.com/api/option/v3/instruments/EOS-USD', 'https://www.okex.com/api/option/v3/underlying']
 
     @classmethod
     def _parse_symbol_data(cls, data: list, symbol_separator: str) -> Tuple[Dict, Dict]:
@@ -36,8 +36,14 @@ class OKEx(OKCoin):
 
         for entry in data:
             for e in entry:
-                ret[e['instrument_id'].replace("-", symbol_separator)] = e['instrument_id']
-                info['tick_size'][e['instrument_id']] = e['tick_size']
+                if cls._entry_is_index_symbol(e):
+                    # Index
+                    standard_symbol = cls._translate_index_symbol(e, False)
+                    ret[standard_symbol] = standard_symbol
+                else:
+                    standard_symbol = e['instrument_id'].replace("-", symbol_separator)
+                    ret[standard_symbol] = e['instrument_id']
+                    info['tick_size'][standard_symbol] = e['tick_size']
 
         for symbol in ret:
             instrument_type = 'futures'
@@ -48,19 +54,29 @@ class OKEx(OKCoin):
                 instrument_type = 'option'
             if symbol[-4:] == "SWAP":  # BTC-USDT-SWAP
                 instrument_type = 'swap'
+            if symbol.startswith(INDEX_PREFIX):
+                instrument_type = 'index'
             info['instrument_type'][symbol] = instrument_type
 
         return ret, info
+
+    @classmethod
+    def _entry_is_index_symbol(cls, entry) -> bool:
+        """
+        Returns true if the entry is an index symbol. In the OkEX API,
+        index data is returned as an array of strings, while regular symbols are an array of dictionaries
+        """
+        return isinstance(entry, str)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.ws_defaults['compression'] = None
         self.address = 'wss://real.okex.com:8443/ws/v3'
 
-    async def _liquidations(self, pairs: list):
+    async def _liquidations(self, pairs: list, conn: AsyncConnection):
         last_update = {}
 
-        while True:
+        while conn.is_open:
             for pair in pairs:
                 if 'SWAP' in pair:
                     instrument_type = 'swap'
@@ -96,5 +112,5 @@ class OKEx(OKCoin):
 
     async def subscribe(self, conn: AsyncConnection):
         if LIQUIDATIONS in self.subscription:
-            asyncio.create_task(self._liquidations(self.subscription[LIQUIDATIONS]))
+            asyncio.create_task(self._liquidations(self.subscription[LIQUIDATIONS], conn))
         return await super().subscribe(conn)
