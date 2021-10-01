@@ -51,7 +51,7 @@ class KrakenFutures(Feed):
             symbol = normalized[3:6] + symbol_separator + normalized[6:9]
             normalized = normalized.replace(normalized[3:9], symbol)
             normalized = normalized.replace('XBT', 'BTC')
-            
+
             if entry['tradeable']:
                 info['tick_size'][normalized] = entry['tickSize']
                 info['contract_size'][normalized] = entry['contractSize']
@@ -61,6 +61,7 @@ class KrakenFutures(Feed):
                 if entry['symbol'].startswith(INDEX_PRODUCT_PREFIX): # Index symbol
                     normalized = cls._translate_index_symbol(entry['symbol'], False)
                     info['product_type'][normalized] = INDEX_PRODUCT_TYPE
+                    entry["symbol"] = normalized
                 else:
                     continue
             ret[normalized] = entry['symbol']
@@ -94,13 +95,15 @@ class KrakenFutures(Feed):
 
                 if index_symbols:
                     # Create background task to fetch index prices
-                    asyncio.create_task(self._subscribe_index_prices(self.subscription[chan], conn))
+                    asyncio.create_task(self._subscribe_index_prices(index_symbols, conn))
             else:
+                # index symbols not supported on standard websocket API
+                symbols = [s for s in self.subscription[chan] if not self._is_index(self.exchange_symbol_to_std_symbol(s))]
                 await conn.write(json.dumps(
                     {
                         "event": "subscribe",
                         "feed": chan,
-                        "product_ids": self.subscription[chan]
+                        "product_ids": symbols
                     }
                 ))
 
@@ -274,12 +277,12 @@ class KrakenFutures(Feed):
                 if ticker['symbol'] not in pairs:
                     # Not subscribed to this pair, skip.
                     continue
-                
-                std_symbol = self.exchange_symbol_to_std_symbol(ticker['symbol'])
+
+                std_symbol = self._translate_index_symbol(ticker['symbol'], False)
                 if not self._is_index(std_symbol):
                     # Pair is not an index, skip.
                     continue
-                
+
                 # Check if values have changed
                 if ticker == last_update.get(ticker['symbol']):
                     continue
