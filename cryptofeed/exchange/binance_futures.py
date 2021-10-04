@@ -118,13 +118,15 @@ class BinanceFutures(Binance):
 
         if self._subscribed_to_feed_and_symbol(FUNDING, msg['s']):
             # Subscribed to the non-index symbol and FUNDING. Send an update.
+            interval = 60*60*8      # 8 hour funding rate interval
             await self.callback(FUNDING,
                                 feed=self.id,
                                 symbol=symbol,
                                 timestamp=ts,
                                 receipt_timestamp=timestamp,
                                 mark_price=msg['p'],
-                                rate=msg['r'],
+                                interval=interval,
+                                next_funding_rate=Decimal(msg['r']),
                                 next_funding_time=timestamp_normalize(self.id, msg['T']),
                                 )
 

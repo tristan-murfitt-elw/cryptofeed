@@ -17,6 +17,7 @@ from typing import Dict, Iterable, Tuple
 import aiohttp
 from sortedcontainers import SortedDict as sd
 from yapic import json
+from cachetools import TTLCache
 
 from cryptofeed.connection import AsyncConnection
 from cryptofeed.defines import BID, ASK, BUY, USER_FILLS
@@ -72,6 +73,7 @@ class FTX(Feed):
         self.l2_book = {}
         self.funding = {}
         self.open_interest = {}
+        self.next_funding = TTLCache(maxsize=100, ttl=60*5)  # dict with a 5 min expiry to prevent overly stale
 
     def _index_to_derivative(self, symbol: str):
         """
@@ -189,8 +191,13 @@ class FTX(Feed):
                                                     receipt_timestamp=time()
                                                     )
                                 self.open_interest[pair] = oi
-                                await asyncio.sleep(rate_limiter)
-                wait_time = 60
+
+                            self.next_funding[pair] = {
+                                'next_funding_rate': data['result'].get('nextFundingRate'),
+                                'next_funding_time': timestamp_normalize(self.id, data['result']['nextFundingTime']) if 'nextFundingTime' in data['result'] else None,
+                            }
+                            await asyncio.sleep(rate_limiter)
+                wait_time = 30
                 await asyncio.sleep(wait_time)
 
     async def _funding(self, pairs: Iterable, conn: AsyncConnection):
@@ -209,28 +216,36 @@ class FTX(Feed):
         # do not send more than 30 requests per second: doing so will result in HTTP 429 errors
         rate_limiter = 0.1
         # funding rates do not change frequently
-        wait_time = 60
+        wait_time = 30
         async with aiohttp.ClientSession() as session:
             while conn.is_open:
                 for pair in pairs:
                     if '-PERP' not in pair:
                         continue
                     async with session.get(f"https://ftx.com/api/funding_rates?future={pair}") as response:
+                        time_now = time()
                         data = await response.text()
                         data = json.loads(data, parse_float=Decimal)
 
-                        last_update = self.funding.get(pair, None)
-                        update = str(data['result'][0]['rate']) + str(data['result'][0]['time'])
-                        if last_update and last_update == update:
+                        funding = {
+                            'rate': data['result'][0]['rate'],
+                            'funding_time': timestamp_normalize(self.id, data['result'][0]['time']),
+                            **self.next_funding.get(pair, {})
+                        }
+
+                        last_update = self.funding.get(pair)
+                        if last_update and last_update == funding:
                             continue
                         else:
-                            self.funding[pair] = update
+                            self.funding[pair] = funding
 
+                        interval = 60*60*1  # hourly funding
                         await self.callback(FUNDING, feed=self.id,
                                             symbol=self.exchange_symbol_to_std_symbol(data['result'][0]['future']),
-                                            rate=data['result'][0]['rate'],
-                                            timestamp=timestamp_normalize(self.id, data['result'][0]['time']),
-                                            receipt_timestamp=time()
+                                            timestamp=time_now,
+                                            receipt_timestamp=time_now,
+                                            interval=interval,
+                                            **funding,
                                             )
                     await asyncio.sleep(rate_limiter)
                 await asyncio.sleep(wait_time)

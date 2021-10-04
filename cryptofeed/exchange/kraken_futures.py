@@ -222,17 +222,20 @@ class KrakenFutures(Feed):
 
     async def _funding(self, msg: dict, pair: str, timestamp: float):
         if msg['tag'] == 'perpetual':
+            interval = 60*60*4  # 4 hour funding intervals
+            funding_time = timestamp_normalize(self.id, msg['time'])
             await self.callback(FUNDING,
                                 feed=self.id,
                                 symbol=pair,
                                 timestamp=timestamp_normalize(self.id, msg['time']),
                                 receipt_timestamp=timestamp,
                                 tag=msg['tag'],
-                                rate=msg['funding_rate'],
-                                rate_prediction=msg.get('funding_rate_prediction', None),
-                                relative_rate=msg['relative_funding_rate'],
-                                relative_rate_prediction=msg.get('relative_funding_rate_prediction', None),
-                                next_rate_timestamp=timestamp_normalize(self.id, msg['next_funding_rate_time']))
+                                rate=msg['relative_funding_rate'],  # relative = the rate per hour
+                                funding_time=funding_time,
+                                next_funding_rate=msg.get('relative_funding_rate_prediction', None),
+                                next_funding_time=funding_time + interval,
+                                interval=interval,
+                                )
         else:
             await self.callback(FUNDING,
                                 feed=self.id,
@@ -250,7 +253,7 @@ class KrakenFutures(Feed):
         await self.callback(OPEN_INTEREST,
                             feed=self.id,
                             symbol=pair,
-                            open_interest=msg['openInterest'],
+                            open_interest=msg['openInterest'],  # in number of contracts
                             timestamp=timestamp_normalize(self.id, msg['time']),
                             receipt_timestamp=timestamp
                             )

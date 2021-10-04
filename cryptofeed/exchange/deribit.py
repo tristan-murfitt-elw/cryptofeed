@@ -46,6 +46,7 @@ class Deribit(Feed):
         self.open_interest = {}
         self.l2_book = {}
         self.seq_no = {}
+        self.funding = {}
 
     @classmethod
     def _entry_is_index_symbol(cls, entry) -> bool:
@@ -153,24 +154,34 @@ class Deribit(Feed):
             'bid_iv': Decimal(m.get('bid_iv', 0)),
             'ask_iv': Decimal(m.get('ask_iv', 0)),
             'mark_iv': Decimal(m.get('mark_iv', 0)),
+            'oi': m.get('open_interest'),   # in quote ccy
             **m.get('greeks', {}),  # vega, theta, rho, gamma, delta
         }
         await self.callback(TICKER, feed=self.id,
                             symbol=pair,
-                            bid=Decimal(msg["params"]["data"]['best_bid_price']),
-                            ask=Decimal(msg["params"]["data"]['best_ask_price']),
+                            bid=Decimal(m['best_bid_price']),
+                            ask=Decimal(m['best_ask_price']),
                             timestamp=ts,
                             receipt_timestamp=timestamp,
                             **extra_fields)
 
-        if "current_funding" in msg["params"]["data"] and "funding_8h" in msg["params"]["data"]:
-            await self.callback(FUNDING, feed=self.id,
-                                symbol=pair,
-                                timestamp=ts,
-                                receipt_timestamp=timestamp,
-                                rate=msg["params"]["data"]["current_funding"],
-                                rate_8h=msg["params"]["data"]["funding_8h"])
-        oi = msg['params']['data']['open_interest']
+        if "current_funding" in m and "funding_8h" in m:
+            funding = {
+                'rate': m["current_funding"],
+                'rate_8h': m["funding_8h"],
+            }
+            if self.funding.get(pair) != funding:
+                self.funding[pair] = funding
+                await self.callback(FUNDING, feed=self.id,
+                                    symbol=pair,
+                                    timestamp=ts,
+                                    receipt_timestamp=timestamp,
+                                    funding_timestamp=ts,
+                                    rate=m["current_funding"],
+                                    rate_8h=m["funding_8h"],
+                                    interval=0,     # continuously applied
+                                    )
+        oi = m['open_interest']
         if pair in self.open_interest and oi == self.open_interest[pair]:
             return
         self.open_interest[pair] = oi
