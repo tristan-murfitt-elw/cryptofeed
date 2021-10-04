@@ -308,13 +308,15 @@ class Binance(Feed):
             "T": 1562306400000          // Next funding time
         }
         """
+        interval = 60*60*8  # 8 hour funding interval
         await self.callback(FUNDING,
                             feed=self.id,
                             symbol=self.exchange_symbol_to_std_symbol(msg['s']),
                             timestamp=timestamp_normalize(self.id, msg['E']),
                             receipt_timestamp=timestamp,
                             mark_price=msg['p'],
-                            rate=msg['r'],
+                            interval=interval,
+                            next_funding_rate=Decimal(msg['r']),
                             next_funding_time=timestamp_normalize(self.id, msg['T']),
                             )
     

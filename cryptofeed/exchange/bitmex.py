@@ -17,6 +17,7 @@ from decimal import Decimal
 
 from sortedcontainers import SortedDict as sd
 from yapic import json
+from cachetools import TTLCache
 
 from cryptofeed.defines import BID, ASK, BITMEX, BUY, FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, SELL, TICKER, TRADES, UNDERLYING_INDEX, UNFILLED, INDEX_PREFIX
 from cryptofeed.feed import Feed
@@ -71,6 +72,7 @@ class Bitmex(Feed):
     def _reset(self):
         self.partial_received = defaultdict(bool)
         self.order_id = {}
+        self.next_funding = TTLCache(maxsize=100, ttl=60*5)  # dict with a 5 min expiry to prevent overly stale
         for pair in self.normalized_symbols:
             self.l2_book[pair] = {BID: sd(), ASK: sd()}
             self.order_id[pair] = defaultdict(dict)
@@ -228,13 +230,15 @@ class Bitmex(Feed):
             ts = timestamp_normalize(self.id, data['timestamp'])
             interval = data['fundingInterval']
             interval = int((interval - dt(interval.year, interval.month, interval.day, tzinfo=interval.tzinfo)).total_seconds())
+            extra_fields = self.next_funding.get(data['symbol'], {})
             await self.callback(FUNDING, feed=self.id,
                                 symbol=self.exchange_symbol_to_std_symbol(data['symbol']),
                                 timestamp=ts,
                                 receipt_timestamp=timestamp,
                                 interval=interval,
                                 rate=data['fundingRate'],
-                                rate_daily=data['fundingRateDaily']
+                                rate_daily=data['fundingRateDaily'],
+                                **extra_fields
                                 )
 
     async def _instrument(self, msg: dict, timestamp: float):
@@ -473,6 +477,11 @@ class Bitmex(Feed):
         }
         """
         for data in msg['data']:
+            if 'indicativeFundingRate' in data:
+                self.next_funding[data['symbol']] = {
+                    'next_funding_rate': data.get('indicativeFundingRate'),
+                    'next_funding_time': timestamp_normalize(self.id, data['fundingTimestamp']) if 'fundingTimestamp' in data else None,
+                }
             if 'openInterest' in data:
                 ts = timestamp_normalize(self.id, data['timestamp'])
                 await self.callback(OPEN_INTEREST, feed=self.id,

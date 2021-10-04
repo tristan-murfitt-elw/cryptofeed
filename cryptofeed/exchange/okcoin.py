@@ -185,13 +185,20 @@ class OKCoin(Feed):
 
     async def _funding(self, msg: dict, timestamp: float):
         for update in msg['data']:
+            # OKEx, OKCoin use the previous period's funding rate (`funding_rate`) at the funding time
+            interval = 60*60*8  # 8 hours
+            funding_time = timestamp_normalize(self.id, update['funding_time'])
             await self.callback(FUNDING,
                                 feed=self.id,
                                 symbol=self.exchange_symbol_to_std_symbol(update['instrument_id']),
-                                timestamp=timestamp_normalize(self.id, update['funding_time']),
+                                timestamp=timestamp,
                                 receipt_timestamp=timestamp,
-                                rate=update['funding_rate'],
+                                rate=Decimal(update['funding_rate']),
                                 estimated_rate=update['estimated_rate'],
+                                prev_funding_time=funding_time,
+                                next_funding_rate=Decimal(update['estimated_rate']),
+                                next_funding_time=funding_time + interval,
+                                interval=interval,
                                 settlement_time=timestamp_normalize(self.id, update['settlement_time']))
 
     async def _book(self, msg: dict, timestamp: float):
