@@ -9,6 +9,8 @@ import logging
 import time
 import asyncio
 import aiohttp
+import pytz
+import datetime as dtm
 from decimal import Decimal
 from typing import Dict, Tuple
 
@@ -225,12 +227,17 @@ class KrakenFutures(Feed):
 
     async def _funding(self, msg: dict, pair: str, timestamp: float):
         if msg['tag'] == 'perpetual':
-            interval = 60*60*4  # 4 hour funding intervals
-            funding_time = timestamp_normalize(self.id, msg['time'])
+            interval_hours = 4
+            interval = 60*60*interval_hours  # in seconds
+            exch_timestamp = timestamp_normalize(self.id, msg['time'])
+            exch_datetime = dtm.datetime.utcfromtimestamp(exch_timestamp)
+            last_funding_hour = exch_datetime.hour - (exch_datetime.hour % interval_hours)  # floor to interval
+            funding_datetime = exch_datetime.replace(hour=last_funding_hour, minute=0, second=0, microsecond=0)
+            funding_time = int(pytz.UTC.localize(funding_datetime).timestamp())
             await self.callback(FUNDING,
                                 feed=self.id,
                                 symbol=pair,
-                                timestamp=timestamp_normalize(self.id, msg['time']),
+                                timestamp=exch_timestamp,
                                 receipt_timestamp=timestamp,
                                 tag=msg['tag'],
                                 rate=msg['relative_funding_rate'],  # relative = the rate per hour
