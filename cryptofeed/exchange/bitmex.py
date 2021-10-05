@@ -480,7 +480,7 @@ class Bitmex(Feed):
             if 'indicativeFundingRate' in data:
                 self.next_funding[data['symbol']] = {
                     'next_funding_rate': data.get('indicativeFundingRate'),
-                    'next_funding_time': timestamp_normalize(self.id, data['fundingTimestamp']) if 'fundingTimestamp' in data else None,
+                    'next_funding_time': timestamp_normalize(self.id, data['fundingTimestamp']) if data.get('fundingTimestamp') else None,
                 }
             if 'openInterest' in data:
                 ts = timestamp_normalize(self.id, data['timestamp'])
