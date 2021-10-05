@@ -116,7 +116,7 @@ class BinanceFutures(Binance):
         exchange_index_symbol = self._translate_index_symbol(msg['s'], False)
         ts = timestamp_normalize(self.id, msg['E'])
 
-        if self._subscribed_to_feed_and_symbol(FUNDING, msg['s']):
+        if self._subscribed_to_feed_and_symbol(FUNDING, msg['s']) and len(msg.get('r', '')):
             # Subscribed to the non-index symbol and FUNDING. Send an update.
             interval = 60*60*8      # 8 hour funding rate interval
             await self.callback(FUNDING,
