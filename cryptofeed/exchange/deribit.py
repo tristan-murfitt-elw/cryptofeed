@@ -176,7 +176,7 @@ class Deribit(Feed):
                                     symbol=pair,
                                     timestamp=ts,
                                     receipt_timestamp=timestamp,
-                                    funding_timestamp=ts,
+                                    funding_time=ts,
                                     rate=m["current_funding"],
                                     rate_8h=m["funding_8h"],
                                     interval=0,     # continuously applied
