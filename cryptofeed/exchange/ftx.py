@@ -66,7 +66,7 @@ class FTX(Feed):
         return cls.info()['is_index'].get(symbol, False)
 
     def __init__(self, **kwargs):
-        super().__init__('wss://ftexchange.com/ws/', **kwargs)
+        super().__init__('wss://ftx.com/ws/', **kwargs)
         self.ws_defaults['compression'] = None
 
     def __reset(self):
