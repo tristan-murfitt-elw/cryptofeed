@@ -114,7 +114,7 @@ class Coinbase(Feed):
                             symbol=symbol,
                             bid=Decimal(msg['best_bid']),
                             ask=Decimal(msg['best_ask']),
-                            timestamp=timestamp_normalize(self.id, msg['time']),
+                            timestamp=timestamp_normalize(self.id, msg.get('time', timestamp)),
                             receipt_timestamp=timestamp,
                             **extra_fields)
 
