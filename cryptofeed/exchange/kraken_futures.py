@@ -226,7 +226,7 @@ class KrakenFutures(Feed):
         await self.book_callback(self.l2_book[pair], L2_BOOK, pair, False, delta, timestamp, timestamp)
 
     async def _funding(self, msg: dict, pair: str, timestamp: float):
-        if msg['tag'] == 'perpetual':
+        if 'funding_rate' in msg:
             interval_hours = 4
             interval = 60*60*interval_hours  # in seconds
             exch_timestamp = timestamp_normalize(self.id, msg['time'])
@@ -246,15 +246,6 @@ class KrakenFutures(Feed):
                                 next_funding_time=funding_time + interval,
                                 interval=interval,
                                 )
-        else:
-            await self.callback(FUNDING,
-                                feed=self.id,
-                                symbol=pair,
-                                timestamp=timestamp_normalize(self.id, msg['time']),
-                                receipt_timestamp=timestamp,
-                                tag=msg['tag'],
-                                premium=msg['premium'],
-                                maturity_timestamp=timestamp_normalize(self.id, msg['maturityTime']))
 
         oi = msg['openInterest']
         if pair in self.open_interest and oi == self.open_interest[pair]:
