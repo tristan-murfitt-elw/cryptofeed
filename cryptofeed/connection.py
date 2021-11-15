@@ -74,6 +74,7 @@ class AsyncConnection(Connection):
     @asynccontextmanager
     async def connect(self):
         await self._open()
+        self.last_message = None
         try:
             yield self
         finally:
