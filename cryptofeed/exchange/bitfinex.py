@@ -41,7 +41,11 @@ CHECKSUM = 131072
 
 class Bitfinex(Feed):
     id = BITFINEX
-    symbol_endpoint = ['https://api-pub.bitfinex.com/v2/conf/pub:list:pair:exchange', 'https://api-pub.bitfinex.com/v2/conf/pub:list:currency']
+    symbol_endpoint = [
+        'https://api-pub.bitfinex.com/v2/conf/pub:list:pair:exchange',
+        'https://api-pub.bitfinex.com/v2/conf/pub:list:currency',
+        'https://api-pub.bitfinex.com/v2/conf/pub:list:pair:futures',
+    ]
 
     @classmethod
     def _parse_symbol_data(cls, data: list, symbol_separator: str) -> Tuple[Dict, Dict]:
@@ -49,6 +53,7 @@ class Bitfinex(Feed):
         ret = {}
         pairs = data[0][0]
         currencies = data[1][0]
+        perpetuals = data[2][0]
         for c in currencies:
             norm = c.replace('BCHN', 'BCH')  # Bitfinex uses BCHN, other exchanges use BCH
             norm = c.replace('UST', 'USDT')
@@ -62,6 +67,14 @@ class Bitfinex(Feed):
             else:
                 norm = norm[:3] + symbol_separator + norm[3:]
             ret[norm] = "t" + p
+
+        for f in perpetuals:
+            norm = f.replace('BCHN', 'BCH')
+            norm = norm.replace('UST', 'USDT')
+            base, quote = norm.split(':')  # 'ALGF0:USTF0'
+            base, quote = base[:-2], quote[:-2]
+            norm = base + symbol_separator + "PERP"
+            ret[norm] = "t" + f
 
         return ret, {}
 
