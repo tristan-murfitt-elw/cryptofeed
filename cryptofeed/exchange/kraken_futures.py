@@ -18,7 +18,7 @@ from sortedcontainers import SortedDict as sd
 from yapic import json
 
 from cryptofeed.connection import AsyncConnection
-from cryptofeed.defines import BID, ASK, BUY, FUNDING, KRAKEN_FUTURES, L2_BOOK, OPEN_INTEREST, UNDERLYING_INDEX, SELL, TICKER, TRADES, INDEX_PREFIX, INDEX_PRICE_POLL_SLEEP_SECONDS
+from cryptofeed.defines import BID, ASK, BUY, FUNDING, KRAKEN_FUTURES, L2_BOOK, OPEN_INTEREST, UNDERLYING_INDEX, REFERENCE_RATE, SELL, TICKER, TRADES, INDEX_PREFIX, INDEX_PRICE_POLL_SLEEP_SECONDS
 from cryptofeed.exceptions import MissingSequenceNumber
 from cryptofeed.feed import Feed
 from cryptofeed.standards import feed_to_exchange, timestamp_normalize
@@ -28,6 +28,9 @@ LOG = logging.getLogger('feedhandler')
 
 INDEX_PRODUCT_TYPE = 'Real Time Index'
 INDEX_PRODUCT_PREFIX = 'in_'
+RR_PRODUCT_TYPE = 'Reference Rate'
+RR_PRODUCT_PREFIX = 'rr_'
+
 
 class KrakenFutures(Feed):
     id = KRAKEN_FUTURES
@@ -42,7 +45,7 @@ class KrakenFutures(Feed):
             'PI': 'Perpetual Inverse Futures',
             'PV': 'Perpetual Vanilla Futures',
             'IN': INDEX_PRODUCT_TYPE,
-            'RR': 'Reference Rate',
+            'RR': RR_PRODUCT_TYPE,
         }
         ret = {}
         info = defaultdict(dict)
@@ -63,16 +66,19 @@ class KrakenFutures(Feed):
                 if entry['symbol'].startswith(INDEX_PRODUCT_PREFIX): # Index symbol
                     normalized = cls._translate_index_symbol(entry['symbol'], False)
                     info['product_type'][normalized] = INDEX_PRODUCT_TYPE
-                    entry["symbol"] = normalized
+                elif entry['symbol'].startswith(RR_PRODUCT_PREFIX):  # Reference Rate symbol
+                    normalized = cls._translate_index_symbol(entry['symbol'], False)
+                    info['product_type'][normalized] = RR_PRODUCT_TYPE
                 else:
                     continue
+                entry["symbol"] = normalized
             ret[normalized] = entry['symbol']
         return ret, info
 
     @classmethod
     def _is_index(cls, symbol: str):
         product_type = cls.info()['product_type'][symbol]
-        return product_type == INDEX_PRODUCT_TYPE
+        return product_type == INDEX_PRODUCT_TYPE or product_type == RR_PRODUCT_TYPE
 
     def __init__(self, **kwargs):
         super().__init__('wss://futures.kraken.com/ws/v1', **kwargs)
@@ -288,7 +294,13 @@ class KrakenFutures(Feed):
                 if ticker == last_update.get(ticker['symbol']):
                     continue
 
-                await self.callback(UNDERLYING_INDEX,
+                if ticker['symbol'].startswith(INDEX_PREFIX):
+                    channel = UNDERLYING_INDEX
+                elif ticker['symbol'].startswith(RR_PRODUCT_PREFIX):
+                    channel = REFERENCE_RATE
+                else:
+                    continue
+                await self.callback(channel,
                                     feed=self.id,
                                     symbol=std_symbol,
                                     timestamp=ticker['lastTime'].timestamp(),
