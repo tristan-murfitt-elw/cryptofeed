@@ -403,6 +403,7 @@ class FTX(Feed):
 
                 if data == last_update.get(data['name']):
                     continue
+                conn.last_message = time.time()
                 await self.callback(UNDERLYING_INDEX,
                                     feed=self.id,
                                     symbol=self.exchange_symbol_to_std_symbol(index_name),

@@ -290,6 +290,7 @@ class KrakenFutures(Feed):
                 if ticker == last_update.get(ticker['symbol']):
                     continue
 
+                conn.last_message = time.time()
                 await self.callback(UNDERLYING_INDEX,
                                     feed=self.id,
                                     symbol=std_symbol,
