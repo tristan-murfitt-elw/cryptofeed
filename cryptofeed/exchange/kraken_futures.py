@@ -26,8 +26,10 @@ from cryptofeed.standards import feed_to_exchange, timestamp_normalize
 
 LOG = logging.getLogger('feedhandler')
 
-INDEX_PRODUCT_TYPE = 'Real Time Index'
+INDEX_PRODUCT_TYPE = 'Index'
 INDEX_PRODUCT_PREFIX = 'in_'
+RR_PRODUCT_PREFIX = 'rr_'
+
 
 class KrakenFutures(Feed):
     id = KRAKEN_FUTURES
@@ -42,7 +44,7 @@ class KrakenFutures(Feed):
             'PI': 'Perpetual Inverse Futures',
             'PV': 'Perpetual Vanilla Futures',
             'IN': INDEX_PRODUCT_TYPE,
-            'RR': 'Reference Rate',
+            'RR': INDEX_PRODUCT_TYPE,
         }
         ret = {}
         info = defaultdict(dict)
@@ -60,7 +62,7 @@ class KrakenFutures(Feed):
                 info['underlying'][normalized] = entry['underlying']
                 info['product_type'][normalized] = _kraken_futures_product_type[normalized[:2]]
             else:
-                if entry['symbol'].startswith(INDEX_PRODUCT_PREFIX): # Index symbol
+                if entry['symbol'].startswith(INDEX_PRODUCT_PREFIX) or entry['symbol'].startswith(RR_PRODUCT_PREFIX): # Index symbol
                     normalized = cls._translate_index_symbol(entry['symbol'], False)
                     info['product_type'][normalized] = INDEX_PRODUCT_TYPE
                     entry["symbol"] = normalized
