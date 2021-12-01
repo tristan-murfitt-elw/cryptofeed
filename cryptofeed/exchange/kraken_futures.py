@@ -290,11 +290,7 @@ class KrakenFutures(Feed):
                 if ticker == last_update.get(ticker['symbol']):
                     continue
 
-                if std_symbol.startswith(INDEX_PREFIX):
-                    channel = UNDERLYING_INDEX
-                else:
-                    continue
-                await self.callback(channel,
+                await self.callback(UNDERLYING_INDEX,
                                     feed=self.id,
                                     symbol=std_symbol,
                                     timestamp=ticker['lastTime'].timestamp(),
