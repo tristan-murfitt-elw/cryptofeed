@@ -64,10 +64,10 @@ class KrakenFutures(Feed):
             else:
                 if entry['symbol'].startswith(INDEX_PRODUCT_PREFIX) or entry['symbol'].startswith(RR_PRODUCT_PREFIX): # Index symbol
                     normalized = cls._translate_index_symbol(entry['symbol'], False)
+                    info['product_type'][normalized] = INDEX_PRODUCT_TYPE
+                    entry["symbol"] = normalized
                 else:
                     continue
-                info['product_type'][normalized] = INDEX_PRODUCT_TYPE
-                entry["symbol"] = normalized
             ret[normalized] = entry['symbol']
         return ret, info
 
