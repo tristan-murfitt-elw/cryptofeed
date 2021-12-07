@@ -237,11 +237,11 @@ class OKEx(Feed):
         for FUTURES liquidations, the following arguments are required: uly, state, alias
         FUTURES, MARGIN and OPTION liquidation request not currently supported by the below
         """
-        last_update = {}
+        last_update = defaultdict(dict)
 
         while conn.is_open:
             for pair in pairs:
-                if 'PERP' in pair:
+                if 'SWAP' in pair:
                     instrument_type = 'SWAP'
                     uly = pair.split("-")[0] + "-" + pair.split("-")[1]
                 else:
@@ -261,10 +261,10 @@ class OKEx(Feed):
 
                         await self.callback(LIQUIDATIONS,
                                             feed=self.id,
-                                            symbol=entry['instrument_id'],
-                                            side=BUY if entry['type'] == '3' else SELL,
-                                            leaves_qty=Decimal(entry['size']),
-                                            price=Decimal(entry['price']),
+                                            symbol=pair,
+                                            side=BUY if entry['side'] == 'buy' else SELL,
+                                            leaves_qty=Decimal(entry['sz']),
+                                            price=Decimal(entry['bkPx']),
                                             order_id=None,
                                             status=FILLED if status == 1 else UNFILLED,
                                             timestamp=timestamp,
