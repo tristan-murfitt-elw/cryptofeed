@@ -238,6 +238,7 @@ class OKEx(Feed):
         FUTURES, MARGIN and OPTION liquidation request not currently supported by the below
         """
         last_update = defaultdict(dict)
+        interval = 60
 
         while conn.is_open:
             for pair in pairs:
@@ -248,9 +249,14 @@ class OKEx(Feed):
                     continue
 
                 for status in (FILLED, UNFILLED):
-                    end_point = f"{self.api}v5/public/liquidation-orders?instType={instrument_type}&limit=100&state={status}&uly={uly}"
-                    data = await self.http_conn.read(end_point)
-                    data = json.loads(data, parse_float=Decimal)
+                    since_ts = int((time.time() - interval*2.5) * 1000)   # only fetch liqs in the last few mins, then inverse normalise the ts
+                    end_point = f"{self.api}v5/public/liquidation-orders?instType={instrument_type}&limit=100&state={status}&uly={uly}&before={since_ts}"
+                    try:
+                        data = await self.http_conn.read(end_point)
+                        data = json.loads(data, parse_float=Decimal)
+                    except Exception as e:
+                        logging.error(f'failed to parse {self.id} liquidations endpoint: url: {end_point}, err: {e}')
+                        continue
                     timestamp = time.time()
                     if len(data['data'][0]['details']) == 0 or (len(data['data'][0]['details']) > 0 and last_update.get(pair) == data['data'][0]['details'][0]):
                         continue
@@ -258,6 +264,9 @@ class OKEx(Feed):
                         if pair in last_update:
                             if entry == last_update[pair].get(status):
                                 break
+
+                        if entry.get('ts', '') == '':
+                            continue
 
                         await self.callback(LIQUIDATIONS,
                                             feed=self.id,
@@ -267,12 +276,12 @@ class OKEx(Feed):
                                             price=Decimal(entry['bkPx']),
                                             order_id=None,
                                             status=FILLED if status == 1 else UNFILLED,
-                                            timestamp=timestamp,
+                                            timestamp=timestamp_normalize(self.id, int(entry['ts'])),
                                             receipt_timestamp=timestamp
                                             )
-                    last_update[pair][status] = data['data'][0]['details'][0]
+                    last_update[pair][status] = data['data'][0]['details'][0]   # cache the most recent
                 await asyncio.sleep(0.1)
-            await asyncio.sleep(60)
+            await asyncio.sleep(interval)
 
     def __reset(self):
         self._l2_book = {}
