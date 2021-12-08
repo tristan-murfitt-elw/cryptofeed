@@ -206,7 +206,7 @@ class OKEx(Feed):
                         Decimal(price): Decimal(amount) for price, amount, *_ in update['asks']
                     })
                 }
-                if self.validate_checksum() and self.__calc_checksum(pair) != (update['checksum'] & 0xFFFFFFFF):
+                if self.checksum_validation and self.__calc_checksum(pair) != (update['checksum'] & 0xFFFFFFFF):
                     raise BadChecksum
                 await self.book_callback(self.l2_book[pair], L2_BOOK, pair, True, None, timestamp_normalize(self.id, int(update['ts'])), timestamp)
         else:
@@ -334,7 +334,6 @@ class OKEx(Feed):
                     if instrument_type == 'spot' and chan == feed_to_exchange(self.id, OPEN_INTEREST):
                         continue  # No open interest for spots
 
-                    
                     channels.append({"channel": chan, "instId": pair})
 
         if channels:
