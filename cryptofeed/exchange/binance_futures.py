@@ -137,7 +137,7 @@ class BinanceFutures(Binance):
                             symbol=index_symbol,
                             timestamp=ts,
                             receipt_timestamp=timestamp,
-                            price=msg['i'])
+                            price=Decimal(msg['i']))
 
     def _subscribed_to_feed_and_symbol(self, feed: str, symbol: str) -> bool:
         return symbol in self.subscription[feed_to_exchange(self.id, feed)]
