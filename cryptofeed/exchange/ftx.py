@@ -178,8 +178,12 @@ class FTX(Feed):
                         continue
                     end_point = f"https://ftx.com/api/futures/{pair}/stats"
                     async with session.get(end_point) as response:
-                        data = await response.text()
-                        data = json.loads(data, parse_float=Decimal)
+                        try:
+                            data = await response.text()
+                            data = json.loads(data, parse_float=Decimal)
+                        except Exception as e:
+                            logging.error(f"failed to parse open interest for FTX, err: {e}")
+                            continue
                         if 'result' in data:
                             oi = data['result']['openInterest']
                             if oi != self.open_interest.get(pair, None):
@@ -222,10 +226,15 @@ class FTX(Feed):
                 for pair in pairs:
                     if '-PERP' not in pair:
                         continue
-                    async with session.get(f"https://ftx.com/api/funding_rates?future={pair}") as response:
+                    url = f"https://ftx.com/api/funding_rates?future={pair}"
+                    async with session.get(url) as response:
                         time_now = time()
-                        data = await response.text()
-                        data = json.loads(data, parse_float=Decimal)
+                        try:
+                            data = await response.text()
+                            data = json.loads(data, parse_float=Decimal)
+                        except Exception as e:
+                            logging.error(f"failed to parse funding rate for FTX ({url}), err: {e}")
+                            continue
 
                         funding = {
                             'rate': data['result'][0]['rate'],
