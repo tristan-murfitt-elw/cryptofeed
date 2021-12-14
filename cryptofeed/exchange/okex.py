@@ -207,7 +207,7 @@ class OKEx(Feed):
                     })
                 }
                 if self.checksum_validation and self.__calc_checksum(pair) != (update['checksum'] & 0xFFFFFFFF):
-                    raise BadChecksum
+                    raise BadChecksum(f"{self.id} {pair} book snapshot")
                 await self.book_callback(self.l2_book[pair], L2_BOOK, pair, True, None, timestamp_normalize(self.id, int(update['ts'])), timestamp)
         else:
             # update
@@ -228,7 +228,7 @@ class OKEx(Feed):
                             delta[s].append((price, amount))
                             self.l2_book[pair][s][price] = amount
                 if self.validate_checksum() and self.__calc_checksum(pair) != (update['checksum'] & 0xFFFFFFFF):
-                    raise BadChecksum
+                    raise BadChecksum(f"{self.id} {pair} book update")
                 await self.book_callback(self.l2_book[pair], L2_BOOK, pair, False, delta, timestamp_normalize(self.id, int(update['ts'])), timestamp)
 
     async def _liquidations(self, pairs: list, conn: AsyncConnection):
