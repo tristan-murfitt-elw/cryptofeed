@@ -334,7 +334,8 @@ class FTX(Feed):
                 })
             }
             if self.checksum_validation and self.__calc_checksum(pair) != check:
-                raise BadChecksum(f"{self.id} {pair} book snapshot")
+                if len(self.l2_book[pair][BID]) >= 100 and len(self.l2_book[pair][ASK]) >= 100:
+                    raise BadChecksum(f"{self.id} {pair} book snapshot")
             await self.book_callback(self.l2_book[pair], L2_BOOK, pair, True, None, float(msg['data']['time']), timestamp)
         else:
             # update
@@ -352,7 +353,8 @@ class FTX(Feed):
                         delta[s].append((price, amount))
                         self.l2_book[pair][s][price] = amount
             if self.validate_checksum() and self.__calc_checksum(pair) != check:
-                raise BadChecksum(f"{self.id} {pair} book update")
+                if len(self.l2_book[pair][BID]) >= 100 and len(self.l2_book[pair][ASK]) >= 100:
+                    raise BadChecksum(f"{self.id} {pair} book update")
             await self.book_callback(self.l2_book[pair], L2_BOOK, pair, False, delta, float(msg['data']['time']), timestamp)
 
     async def _fill(self, msg: dict, timestamp: float):
