@@ -30,7 +30,7 @@ class Blockchain(Feed):
         return {data["symbol"].replace("-", symbol_separator): data["symbol"] for data in data if data['status'] == 'open'}, {}
 
     def __init__(self, **kwargs):
-        super().__init__("wss://ws.prod.blockchain.info/mercury-gateway/v1/ws", origin="https://exchange.blockchain.com", **kwargs)
+        super().__init__("wss://ws.blockchain.info/mercury-gateway/v1/ws", origin="https://exchange.blockchain.com", **kwargs)
         self.__reset()
 
     def __reset(self):
