@@ -55,6 +55,8 @@ class BybitSpot(Feed):
                 LOG.debug("%s: Subscription success %s", self.id, msg)
             else:
                 LOG.error("%s: Error from exchange %s", self.id, msg)
+        elif "topic" not in msg:
+            LOG.warning("%s: Invalid message (not topic) %s", self.id, msg)
         elif "trade" in msg["topic"]:
             await self._trade(msg, timestamp)
         elif "depth" in msg["topic"]:
@@ -68,20 +70,17 @@ class BybitSpot(Feed):
         self.__reset(quote=quote)
 
         for chan in self.subscription:
-            symbols = []
             for pair in self.subscription[chan]:
-                symbols.append(pair)
-
-            await connection.write(json.dumps(
-                {
-                    "topic": chan,
-                    "event": "sub",
-                    "params": {
-                        "binary": False,
-                        "symbol": ','.join(symbols),
+                await connection.write(json.dumps(
+                    {
+                        "topic": chan,
+                        "event": "sub",
+                        "params": {
+                            "binary": False,
+                            "symbol": self.exchange_symbol_to_std_symbol(pair),
+                        }
                     }
-                }
-            ))
+                ))
 
     async def _ticker(self, msg: dict, timestamp: float):
         """
@@ -179,8 +178,6 @@ class BybitSpot(Feed):
         data = msg['data']
         delta = {BID: [], ASK: []}
 
-        # TODO are all updates snapshots, or only the first one?
-        # API doesn't tell. This code assumes all are snapshots
         bids = sd({})
         asks = sd({})
         for level in data['b']:
