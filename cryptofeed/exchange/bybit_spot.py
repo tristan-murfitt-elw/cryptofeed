@@ -1,24 +1,15 @@
-'''
-Copyright (C) 2018-2021  Bryant Moscon - bmoscon@gmail.com
-
-Please see the LICENSE file for the terms and conditions
-associated with this software.
-'''
 from collections import defaultdict
 import logging
 from decimal import Decimal
-from functools import partial
-from typing import Dict, List, Callable, Tuple
+from typing import Dict, Tuple
 
 from sortedcontainers import SortedDict as sd
 from yapic import json
 
-from cryptofeed.connection import AsyncConnection, WSAsyncConn
+from cryptofeed.connection import AsyncConnection
 from cryptofeed.defines import BID, ASK, BUY, BYBIT_SPOT, L2_BOOK, SELL, TRADES, TICKER
 from cryptofeed.feed import Feed
 from cryptofeed.standards import timestamp_normalize
-from cryptofeed.exchange.bybit import Bybit
-
 
 LOG = logging.getLogger('feedhandler')
 
@@ -32,7 +23,8 @@ class BybitSpot(Feed):
         ret = {}
         info = defaultdict(dict)
         for symbol in data['result']:
-            ret[symbol['name']] = symbol['name']
+            normalized = f"{symbol['baseCurrency']}{symbol_separator}{symbol['quoteCurrency']}"
+            ret[normalized] = symbol['name']
         return ret, info
 
     def __init__(self, **kwargs):
@@ -77,7 +69,7 @@ class BybitSpot(Feed):
                         "event": "sub",
                         "params": {
                             "binary": False,
-                            "symbol": self.exchange_symbol_to_std_symbol(pair),
+                            "symbol": pair,
                         }
                     }
                 ))
@@ -104,13 +96,13 @@ class BybitSpot(Feed):
         pair = self.exchange_symbol_to_std_symbol(msg['params']['symbol'])
         extra_fields = {
             'bbo': self.get_book_bbo(pair),
-            'best_bid_size': Decimal(msg['data']['bidQty']),
-            'best_ask_size': Decimal(msg['data']['askQty']),
+            'best_bid_size': Decimal(msg['data']['bidQty'] or 0),
+            'best_ask_size': Decimal(msg['data']['askQty'] or 0),
         }
         await self.callback(TICKER, feed=self.id,
                             symbol=pair,
-                            bid=msg['data']['bidPrice'],
-                            ask=msg['data']['askPrice'],
+                            bid=Decimal(msg['data']['bidPrice'] or 0),
+                            ask=Decimal(msg['data']['askPrice'] or 0),
                             timestamp=timestamp_normalize(self.id, msg['data']['time']),
                             receipt_timestamp=timestamp,
                             **extra_fields)
@@ -176,17 +168,15 @@ class BybitSpot(Feed):
         """
         pair = self.exchange_symbol_to_std_symbol(msg['params']['symbol'])
         data = msg['data']
-        delta = {BID: [], ASK: []}
-
-        bids = sd({})
-        asks = sd({})
-        for level in data['b']:
-            bids[Decimal(level[0])] = Decimal(level[1])
-        for level in data['a']:
-            asks[Decimal(level[0])] = Decimal(level[1])
-        self.l2_book[pair] = {BID: bids, ASK: asks}
-        forced = True
-
-        # timestamp is in microseconds
         ts = timestamp_normalize(self.id, data['t'])
-        await self.book_callback(self.l2_book[pair], L2_BOOK, pair, forced, delta, ts, timestamp)
+
+        # bybit spot provides regular full snapshots but no deltas
+        # to avoid high bandwidth, we compute deltas ourselves and continue to publish snaps infrequently
+        # setting previous_book and delta={} enables this logic flow in the book_callback
+        new_snap = {
+            BID: sd({Decimal(px): Decimal(sz) for px, sz in data['b']}),
+            ASK: sd({Decimal(px): Decimal(sz) for px, sz in data['a']}),
+        }
+        self.previous_book[pair] = self.l2_book.get(pair, new_snap)
+        self.l2_book[pair] = new_snap
+        await self.book_callback(self.l2_book[pair], L2_BOOK, pair, False, {}, ts, timestamp)
