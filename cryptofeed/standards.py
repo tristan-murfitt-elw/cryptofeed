@@ -14,7 +14,7 @@ import datetime as dt
 
 from cryptofeed.defines import (BINANCE, BINANCE_DELIVERY, BINANCE_FUTURES, BINANCE_US, BITCOINCOM, BITFLYER, BITFINEX,
                                 BITHUMB, BITMAX, BITMEX,
-                                BITSTAMP, BITTREX, BLOCKCHAIN, BYBIT, CANDLES, COINBASE, COINGECKO,
+                                BITSTAMP, BITTREX, BLOCKCHAIN, BYBIT, BYBIT_SPOT, CANDLES, COINBASE, COINGECKO,
                                 DERIBIT, EXX, FTX, FTX_US, GATEIO, GEMINI, HITBTC, HUOBI, HUOBI_DM, HUOBI_SWAP,
                                 KRAKEN, KRAKEN_FUTURES, KUCOIN, OKCOIN, OKEX, POLONIEX, PROBIT, UPBIT, USER_FILLS)
 from cryptofeed.defines import (FILL_OR_KILL, IMMEDIATE_OR_CANCEL, LIMIT, MAKER_OR_CANCEL, MARKET, UNSUPPORTED)
@@ -35,7 +35,7 @@ def timestamp_normalize(exchange, ts):
     if exchange in {BITFLYER, COINBASE, BLOCKCHAIN, BITMEX, HITBTC, OKCOIN, FTX, FTX_US, BITCOINCOM, PROBIT, COINGECKO, BITTREX}:
         return ts.timestamp()
     elif exchange in {HUOBI, HUOBI_DM, HUOBI_SWAP, BITFINEX, DERIBIT, BINANCE, BINANCE_US, BINANCE_FUTURES,
-                      BINANCE_DELIVERY, GEMINI, BITMAX, KRAKEN_FUTURES, OKEX, UPBIT}:
+                      BINANCE_DELIVERY, GEMINI, BITMAX, KRAKEN_FUTURES, OKEX, UPBIT, BYBIT_SPOT}:
         return ts / 1000.0
     elif exchange in {BITSTAMP}:
         return ts / 1000000.0
@@ -69,6 +69,7 @@ _feed_to_exchange_map = {
         OKEX: 'books-l2-tbt',
         DERIBIT: 'book',
         BYBIT: 'orderBookL2_25',
+        BYBIT_SPOT: 'depth',
         FTX: 'orderbook',
         FTX_US: 'orderbook',
         GEMINI: L2_BOOK,
@@ -102,6 +103,7 @@ _feed_to_exchange_map = {
         OKCOIN: UNSUPPORTED,
         OKEX: UNSUPPORTED,
         BYBIT: UNSUPPORTED,
+        BYBIT_SPOT: UNSUPPORTED,
         FTX: UNSUPPORTED,
         FTX_US: UNSUPPORTED,
         GEMINI: UNSUPPORTED,
@@ -134,6 +136,7 @@ _feed_to_exchange_map = {
         OKEX: 'trades',
         DERIBIT: 'trades',
         BYBIT: 'trade',
+        BYBIT_SPOT: 'trade',
         FTX: 'trades',
         FTX_US: 'trades',
         GEMINI: TRADES,
@@ -166,6 +169,7 @@ _feed_to_exchange_map = {
         OKEX: 'tickers',
         DERIBIT: "ticker",
         BYBIT: UNSUPPORTED,
+        BYBIT_SPOT: 'bookTicker',
         FTX: "ticker",
         FTX_US: "ticker",
         GEMINI: UNSUPPORTED,

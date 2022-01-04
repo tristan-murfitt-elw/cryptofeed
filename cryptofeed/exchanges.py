@@ -22,6 +22,7 @@ from cryptofeed.exchange.bitstamp import Bitstamp
 from cryptofeed.exchange.bittrex import Bittrex
 from cryptofeed.exchange.blockchain import Blockchain
 from cryptofeed.exchange.bybit import Bybit
+from cryptofeed.exchange.bybit_spot import BybitSpot
 from cryptofeed.exchange.coinbase import Coinbase
 from cryptofeed.exchange.deribit import Deribit
 from cryptofeed.exchange.exx import EXX
@@ -57,6 +58,7 @@ EXCHANGE_MAP = {
     BITTREX: Bittrex,
     BLOCKCHAIN: Blockchain,
     BYBIT: Bybit,
+    BYBIT_SPOT: BybitSpot,
     COINBASE: Coinbase,
     COINGECKO: Coingecko,
     DERIBIT: Deribit,
